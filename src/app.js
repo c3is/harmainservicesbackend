@@ -30,6 +30,8 @@ app.use(express.json());
 //     }
 // })
 
+
+//  to add any service in db 
 app.post("/service",async(req,res)=>{
     try{
         const service=new ServiceModel(req.body)
@@ -42,6 +44,18 @@ app.post("/service",async(req,res)=>{
     }
 })
 
+// to add multiple services in db 
+app.post("/services/bulk", async (req, res) => {
+  try {
+    await ServiceModel.insertMany(req.body);
+    res.status(201).send("Services saved successfully");
+  } catch (err) {
+    console.error(err);
+    res.status(400).json(err);
+  }
+});
+
+// to get all services from db 
 app.get("/service",async(req,res)=>
 {
     try{
