@@ -45,7 +45,7 @@ app.post("/service",async(req,res)=>{
 })
 
 // to add multiple services in db 
-app.post("/services/bulk", async (req, res) => {
+app.post("/services", async (req, res) => {
   try {
     await ServiceModel.insertMany(req.body);
     res.status(201).send("Services saved successfully");
@@ -56,7 +56,7 @@ app.post("/services/bulk", async (req, res) => {
 });
 
 // to get all services from db 
-app.get("/service",async(req,res)=>
+app.get("/services",async(req,res)=>
 {
     try{
         const services=await ServiceModel.find({});
@@ -64,6 +64,17 @@ app.get("/service",async(req,res)=>
 
     }catch(err){
         res.send("something went wrong")
+    }
+})
+
+app.get("/service/:slug",async(req,res)=>{
+    try{
+        const {slug}=req.params;
+        const doc = await ServiceModel.findOne({slug})
+        res.send(doc);
+    }
+    catch{
+        res.status(401).send("document not found")
     }
 })
 
