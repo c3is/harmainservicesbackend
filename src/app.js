@@ -60,7 +60,7 @@ app.get("/services",async(req,res)=>
 {
     try{
         const services=await ServiceModel.find({});
-        res.send(services);
+         res.json(services);
 
     }catch(err){
         res.send("something went wrong")
@@ -70,8 +70,8 @@ app.get("/services",async(req,res)=>
 app.get("/service/:slug",async(req,res)=>{
     try{
         const {slug}=req.params;
-        const doc = await ServiceModel.findOne({slug})
-        res.send(doc);
+        const service = await ServiceModel.findOne({slug})
+        res.json(service);
     }
     catch{
         res.status(401).send("document not found")
