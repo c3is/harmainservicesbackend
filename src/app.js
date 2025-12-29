@@ -2,6 +2,8 @@ const express = require('express');
 const app = express();
 const mongoose=require("mongoose");
 
+const cors=require("cors");
+
 // =======================
 // DB & MODELS IMPORTS
 // =======================
@@ -16,6 +18,7 @@ const { ServiceRequest } = require('./models/ServiceRequest');
 const { JobNotification } = require('./models/JobNotification');
 const { JobAcceptance } = require('./models/JobAcceptance');
 
+app.use(cors());
 app.use(express.json());
 
 
