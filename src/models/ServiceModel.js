@@ -1,6 +1,6 @@
 const mongoose=require("mongoose");
 
-const priceServiceSchema=mongoose.Schema({
+const priceServiceSchema= new mongoose.Schema({
     name:{
         type:String,
         required:true
@@ -32,7 +32,8 @@ const serviceModel=new mongoose.Schema({
         type:String,
         required:true,
         unique:true,
-        lowercase:true
+        lowercase:true,
+        index:true
     },
     title:{
         type:String,
