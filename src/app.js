@@ -110,6 +110,86 @@ app.get("/service/:slug", async (req, res) => {
     }
 });
 
+app.patch("/service/:slug/sub-service", async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const newSubService = req.body;
+    console.log(slug,newSubService);
+
+    // Check service exists
+    const service = await ServiceModel.findOne({ slug });
+    if (!service) {
+      return res.status(404).json("Service not found");
+    }
+    console.log(service);
+    //Prevent duplicate sub-service
+    const alreadyExists = service.services.some(
+      s => s.name.toLowerCase() === newSubService.name.toLowerCase()
+    );
+
+    if (alreadyExists) {
+      return res.status(409).send("Sub-service already exists");
+    }
+
+    // Push new sub-service
+    const result = await ServiceModel.updateOne(
+      { slug },
+      { $push: { services: newSubService } }
+    );
+
+    // Confirm update
+    if (result.modifiedCount === 0) {
+      return res.status(400).send("Sub-service not added");
+    }
+
+    res.status(200).send("Sub-service added successfully");
+  } catch (err) {
+    res.status(500).send("something went wrong");
+  }
+});
+
+
+app.patch("/service/:slug/sub-service/:subServiceName/detailed-sub-service",async(req,res)=>{
+    try{
+        const {slug,subServiceName}=req.params;
+
+        const newRelatedSubService=req.body;
+        console.log("first",slug,subServiceName);
+
+        const service=await ServiceModel.findOne({slug});
+        if(!service){
+            res.status(404).json("Not Found");
+            return;
+        }
+        console.log("second",service);
+
+        const subService = service.services.find(
+            ser => ser.name.toLowerCase() === subServiceName.toLowerCase()
+            );
+           
+
+        if (!subService) {
+            return res.status(404).send("Sub-service not found");
+        }
+         console.log("third",subService);
+         
+        await ServiceModel.updateOne(
+            {
+                slug:slug,
+                "services.name": subService.name
+            },
+            {
+                $push:{
+                    "services.$.detailedSubService": newRelatedSubService
+                }
+            })
+        res.status(200).json("success")
+    }
+    catch{
+        res.status(500).send("Bad req")
+    }
+    })
+
 
 // =====================================================
 // SERVICE REQUEST APIs (Customer creates job)
@@ -118,35 +198,35 @@ app.get("/service/:slug", async (req, res) => {
 // Customer creates a service request (e.g., plumbing job)
 app.post("/service-request", async (req, res) => {
     try {
-        const { name, phone, category } = req.body;
+        const { serviceSlug, serviceName, serviceVisitingCharges,addons,customer,totalAmount } = req.body;
+        console.log("first", serviceSlug, serviceName, serviceVisitingCharges,addons,customer,totalAmount );
 
         // Find service by slug
-        const service = await ServiceModel.findOne({ slug: category });
+        const service = await ServiceModel.findOne({ slug: serviceSlug });
         if (!service) {
             res.status(400).send("No records found");
             return;
         }
-
+        // console.log("service",service);
         // Create service request
         const serviceReq = new ServiceRequest({
             serviceId: service._id,
-            customerName: name,
-            customerPhone: phone,
+            customerName: customer.name,
+            customerPhone: customer.phone,
             serviceName: service.title,
         });
 
         await serviceReq.save();
+        // console.log(serviceReq);
         
 
         // Fetch all active providers for this service
         const providers = await Provider.find({
-            jobRole: category,
+            jobRole: serviceSlug,
             isActive: true
         });
 
-        console.log("Category received:", category);
-        console.log("Providers found:", providers.length);
-
+        console.log(providers);
 
         // Create job notifications (simulation of WhatsApp sending)
         for (const provider of providers) {

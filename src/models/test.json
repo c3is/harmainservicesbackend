@@ -1,0 +1,77 @@
+{
+  "slug": "medical-diagnoses",
+  "title": "Medical Diagnoses",
+  "category": "healthcare",
+  "heroImg": "/images/services/medical/hero.webp",
+  "description": "We provide fast and reliable electronics repair for everyday devices. Accurate diagnosis, careful handling, and repairs that bring your equipment back to proper working condition.",
+  "Icon": "Medical",
+  "services": [
+    {
+      "name": "Modern Diagnosis Labs",
+      "image": "/images/services/medical/lab1.webp",
+      "isBookNow": true,
+      "detailedSubService": [
+        {
+          "name": "Full Body Medical Checkup",
+          "price": 999,
+          "note": "Includes Serum Iron, TSH, T3, T4, Lipid Profile, KFT, LFT, CBC, Blood Sugar",
+          "image": "/images/services/medical/1.webp"
+        },
+        {
+          "name": "BSF",
+          "price": 70,
+          "image": "/images/services/medical/2.webp"
+        },
+        {
+          "name": "ESF",
+          "price": 70,
+          "image": "/images/services/medical/3.webp"
+        },
+        {
+          "name": "KFT",
+          "price": 400,
+          "image": "/images/services/medical/4.webp"
+        },
+        {
+          "name": "LFT",
+          "price": 400,
+          "image": "/images/services/medical/5.webp"
+        },
+        {
+          "name": "Vitamin D3",
+          "price": 800,
+          "image": "/images/services/medical/6.webp"
+        },
+        {
+          "name": "TSH",
+          "price": 150,
+          "image": "/images/services/medical/7.webp"
+        },
+        {
+          "name": "Lipid Profile",
+          "price": 400,
+          "image": "/images/services/medical/8.webp"
+        },
+        {
+          "name": "CBC",
+          "price": 200,
+          "image": "/images/services/medical/9.webp"
+        },
+        {
+          "name": "Iron",
+          "price": 300,
+          "image": "/images/services/medical/10.webp"
+        }
+      ]
+    }
+  ],
+  "seoTitle": "Medical Diagnostic Tests & Health Checkups",
+  "seoDescription": "Book medical diagnostic tests including full body checkups, blood tests, vitamin tests, and lab investigations.",
+  "keywords": [
+    "medical diagnosis",
+    "health checkup",
+    "blood tests",
+    "lab tests",
+    "diagnostic services"
+  ]
+}

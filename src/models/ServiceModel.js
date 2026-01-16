@@ -1,69 +1,102 @@
-const mongoose=require("mongoose");
+    const mongoose=require("mongoose");
 
-const priceServiceSchema= new mongoose.Schema({
-    name:{
-        type:String,
-        required:true
-    },
-    price:{
-        type:Number,
-        required:true
-    }
-},{ _id: false })
+    const detailedSubService= new mongoose.Schema({
+        name:{
+            type:String,
+            required:true
+        },
+        price:{
+            type:Number,
+        },
+        priceInfo:{
+            type:String
+        },
+        note:{
+            type:String
+        },
+        website:{
+            type:String
+        },
+        image:{
+            type:String
+        }
+    },{ _id: false })
 
-const subServiceSchema=new mongoose.Schema({
-    name:{
-        type:String,
-        required:true
-    },
-    price:[priceServiceSchema],
-    description:{
-        type:String,
-    },
-    image:{
-        type:String,
-        required:true
-    }
-    
-}, { _id: false });
-
-const serviceModel=new mongoose.Schema({
-    slug:{
-        type:String,
-        required:true,
-        unique:true,
-        lowercase:true,
-        index:true
-    },
-    title:{
-        type:String,
-        required:true,
-    },
-    category:{
-        type:String,
-        required:true,
-    },
-    heroImg:{
-        type:String,
-        required:true,
-    },
-    description:{
-        type:String,
-        required:true,
-    },
-    services: [subServiceSchema],
-
-    seoTitle:{
-        type:String,
-       
-    },
-    seoDescription:{
-        type:String,
+    const subServiceSchema=new mongoose.Schema({
+        name:{
+            type:String,
+            required:true
+        },
+        info:{
+            type:String,
+        },
+        detailedSubService:[detailedSubService],
+        description:{
+            type:String,
+        },
+        image:{
+            type:String,
+            required:true
+        },
+        isBookNow:{
+            type:Boolean,
+            default:true
+        }, 
+        note:{
+            type:String
+        },
+        details:{
+            type:String
+        }
         
-    },
-    keywords:[String]
-})
+    }, { _id: false });
+
+    const serviceModel=new mongoose.Schema({
+        slug:{
+            type:String,
+            required:true,
+            unique:true,
+            lowercase:true,
+            index:true
+        },
+        visitingCharges:{
+            type:Number,
+        },
+        note:{
+            type:String
+        },
+        title:{
+            type:String,
+            required:true,
+        },
+        category:{
+            type:String,
+            required:true,
+        },
+        heroImg:{
+            type:String,
+            required:true,
+        },
+        description:{
+            type:String,
+            required:true,
+        },
+        services: [subServiceSchema],
+
+        seoTitle:{
+            type:String,
+        
+        },
+        seoDescription:{
+            type:String,
+            
+        },
+        Icon:{
+            type:String,
+        },
+        keywords:[String]
+    })
 
 
-const ServiceModel= mongoose.model("serviceModel",serviceModel)
-module.exports=ServiceModel;
+    const ServiceModel= mongoose.model("serviceModel",serviceModel)
+    module.exports=ServiceModel;
