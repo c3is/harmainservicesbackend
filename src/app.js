@@ -95,6 +95,15 @@ app.get("/services", async (req, res) => {
 
 
 
+app.get("/services/slugs", async (req, res) => {
+  try {
+    const slugs = await ServiceModel.distinct("slug");
+    res.json(slugs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch slugs" });
+  }
+});
 
 
 
