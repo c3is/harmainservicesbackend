@@ -25,6 +25,10 @@ const ServiceRequestSchema= new mongoose.Schema({
         enum: ["pending", "assigned","cancelled"],
         default:"pending"
     },
+    customerAddress: {
+    type: String,
+    }
+
 
 },{ timestamps: true,}
 )

@@ -1,370 +1,366 @@
-const express = require('express');
+require("dotenv").config();
+const express = require("express");
 const app = express();
-const mongoose=require("mongoose");
+const axios = require("axios");
+const cors = require("cors");
 
-const cors=require("cors");
-
-// =======================
-// DB & MODELS IMPORTS
-// =======================
-
-// const { adminAuth, userAuth } = require("./middlewares/auth"); // Auth (future use)
-
+const { sendWhatsAppTemplate } = require("./utils/sendWhatsapp");
 const { connectDB } = require("./config/db");
 
 const ServiceModel = require("./models/ServiceModel");
 const Provider = require("./models/Provider");
-const { ServiceRequest } = require('./models/ServiceRequest');
-const { JobNotification } = require('./models/JobNotification');
-const { JobAcceptance } = require('./models/JobAcceptance');
+const { ServiceRequest } = require("./models/ServiceRequest");
+const { JobNotification } = require("./models/JobNotification");
+const { JobAcceptance } = require("./models/JobAcceptance");
 
 app.use(cors());
 app.use(express.json());
 
+// ================= TEXT MESSAGE HELPER =================
+function formatDestination(phone) {
+  phone = phone.replace(/\D/g, "").slice(-10);
+  return "91" + phone;
+}
 
-// =====================================================
-// PROVIDER (EMPLOYEE) APIs
-// =====================================================
-
-// Create a new provider (plumber, electrician, etc.)
-app.post("/provider", async (req, res) => {
-    try {
-        const provider = new Provider(req.body);
-        await provider.save();
-        res.json("Provider Saved");
-    } catch (err) {
-        res.status(401).send("something went wrong");
-    }
-});
-
-// Get providers by service/job role (used internally or for testing)
-app.get("/providers/:service", async (req, res) => {
-    try {
-        const { service } = req.params;
-        const providers = await Provider.find({ jobRole: service });
-        res.json(providers);
-    } catch (err) {
-        res.json("something went wrong");
-    }
-});
-
-// Get active providers for a given category (future FE use)
-app.get("/providers", async (req, res) => {
-    try {
-        const { category } = req.body;
-        const providers = await Provider.find({
-            jobRole: category,
-            isActive: true
-        });
-        res.json(providers);
-    } catch (err) {
-        res.json("something went wrong");
-    }
-});
-
-
-// =====================================================
-// SERVICE MASTER APIs
-// (Plumbing, Carpentry, etc.)
-// =====================================================
-
-// Add a single service
-app.post("/service", async (req, res) => {
-    try {
-        const service = new ServiceModel(req.body);
-        await service.save();
-        res.send("service saved");
-    } catch (err) {
-        res.status(401).send("something went wrong");
-    }
-});
-
-// Add multiple services at once (bulk insert)
-app.post("/services", async (req, res) => {
-    try {
-        await ServiceModel.insertMany(req.body);
-        res.status(201).send("Services saved successfully");
-    } catch (err) {
-        res.status(400).json(err);
-    }
-});
-
-// Get all services (for frontend listing)
-app.get("/services", async (req, res) => {
-    try {
-        const services = await ServiceModel.find({});
-        res.json(services);
-    } catch (err) {
-        res.send("something went wrong");
-    }
-});
-
-// Get a single service by slug (SEO-friendly URL)
-app.get("/service/:slug", async (req, res) => {
-    try {
-        const { slug } = req.params;
-        const doc = await ServiceModel.findOne({ slug });
-        res.json(doc);
-    } catch {
-        res.status(401).send("document not found");
-    }
-});
-
-app.patch("/service/:slug/sub-service", async (req, res) => {
+async function sendWhatsAppText(destination, text) {
   try {
-    const { slug } = req.params;
-    const newSubService = req.body;
-    console.log(slug,newSubService);
+    const formattedDestination = formatDestination(destination);
 
-    // Check service exists
-    const service = await ServiceModel.findOne({ slug });
-    if (!service) {
-      return res.status(404).json("Service not found");
-    }
-    console.log(service);
-    //Prevent duplicate sub-service
-    const alreadyExists = service.services.some(
-      s => s.name.toLowerCase() === newSubService.name.toLowerCase()
+    const response = await axios.post(
+      "https://api.gupshup.io/wa/api/v1/msg",
+      new URLSearchParams({
+        channel: "whatsapp",
+        source: process.env.GUPSHUP_SOURCE_NUMBER,
+        destination: formattedDestination,
+        message: JSON.stringify({
+          type: "text",
+          text
+        })
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          apikey: process.env.GUPSHUP_API_KEY
+        }
+      }
     );
 
-    if (alreadyExists) {
-      return res.status(409).send("Sub-service already exists");
-    }
-
-    // Push new sub-service
-    const result = await ServiceModel.updateOne(
-      { slug },
-      { $push: { services: newSubService } }
-    );
-
-    // Confirm update
-    if (result.modifiedCount === 0) {
-      return res.status(400).send("Sub-service not added");
-    }
-
-    res.status(200).send("Sub-service added successfully");
+    console.log("✅ Text message sent:", response.data);
   } catch (err) {
-    res.status(500).send("something went wrong");
+    console.error("❌ Text message error:", err?.response?.data || err.message);
+  }
+}
+
+// ================= PROVIDER APIs =================
+app.post("/provider", async (req, res) => {
+  try {
+    const provider = new Provider({
+      ...req.body,
+      jobRole: req.body.jobRole.map(r => r.toLowerCase())
+    });
+
+    await provider.save();
+    res.json("Provider Saved");
+  } catch (err) {
+    res.status(500).send("Something went wrong");
+  }
+});
+
+app.get("/providers/:service", async (req, res) => {
+  try {
+    const providers = await Provider.find({
+      jobRole: req.params.service.toLowerCase()
+    });
+    res.json(providers);
+  } catch {
+    res.status(500).send("Error fetching providers");
+  }
+});
+
+// ================= SERVICE MASTER APIs =================
+app.post("/service", async (req, res) => {
+  try {
+    const service = new ServiceModel(req.body);
+    await service.save();
+    res.send("Service saved");
+  } catch {
+    res.status(500).send("Service creation failed");
+  }
+});
+
+app.get("/services", async (req, res) => {
+  const services = await ServiceModel.find({});
+  res.json(services);
+});
+
+
+
+
+
+
+
+
+app.get("/service/:slug", async (req, res) => {
+  const service = await ServiceModel.findOne({ slug: req.params.slug });
+  if (!service) return res.status(404).send("Not found");
+  res.json(service);
+});
+
+// ================= SERVICE REQUEST =================
+app.post("/service-request", async (req, res) => {
+  try {
+    const { serviceSlug, customer } = req.body;
+
+    const service = await ServiceModel.findOne({ slug: serviceSlug });
+    if (!service) return res.status(400).send("Invalid service");
+
+    const serviceReq = new ServiceRequest({
+      serviceId: service._id,
+      serviceName: service.title,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerAddress: customer.address,
+    });
+
+    await serviceReq.save();
+
+    const providers = await Provider.find({
+      jobRole: serviceSlug.toLowerCase(),
+      isActive: true,
+    });
+
+    console.log("Providers found:", providers.length);
+
+    for (const provider of providers) {
+      try {
+        const jobNotification = await JobNotification.create({
+          serviceRequestId: serviceReq._id,
+          providerId: provider._id,
+          status: "created"
+        });
+
+        const now = new Date();
+
+        const sessionActive =
+          provider.lastInteractionAt &&
+          now - provider.lastInteractionAt < 24 * 60 * 60 * 1000;
+
+        if (sessionActive) {
+
+          console.log("🟢 Sending SESSION message");
+
+          await sendWhatsAppText(
+            provider.phoneNumber,
+            `New job request 🔧
+Location: ${customer.address || "Not provided"}
+Reply YES to accept`
+          );
+
+        } else {
+
+          console.log("🔵 Sending TEMPLATE message");
+
+          await sendWhatsAppTemplate(
+            provider.phoneNumber,
+            process.env.GUPSHUP_JOB_TEMPLATE_ID,
+            [
+              provider.name,
+              customer.address || "Location not provided",
+              new Date().toLocaleString("en-IN"),
+            ]
+          );
+
+        }
+
+        // ⭐ IMPORTANT
+        await JobNotification.updateOne(
+          { _id: jobNotification._id },
+          { $set: { status: "sent" } }
+        );
+
+      } catch (err) {
+        console.error("Provider failed:", provider.phoneNumber, err.message);
+      }
+    }
+
+    res.json("Service request created");
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Failed to create request");
   }
 });
 
 
-app.patch("/service/:slug/sub-service/:subServiceName/detailed-sub-service",async(req,res)=>{
-    try{
-        const {slug,subServiceName}=req.params;
+// ================= JOB ACCEPT =================
+app.post("/webhook/whatsapp", async (req, res) => {
+  try {
 
-        const newRelatedSubService=req.body;
-        console.log("first",slug,subServiceName);
+    console.log("========== WhatsApp Webhook Hit ==========");
 
-        const service=await ServiceModel.findOne({slug});
-        if(!service){
-            res.status(404).json("Not Found");
-            return;
-        }
-        console.log("second",service);
+    const payload = req.body;
+    const entry = payload?.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
 
-        const subService = service.services.find(
-            ser => ser.name.toLowerCase() === subServiceName.toLowerCase()
-            );
-           
+    const incomingPhone =
+      value?.messages?.[0]?.from ||
+      value?.contacts?.[0]?.wa_id;
 
-        if (!subService) {
-            return res.status(404).send("Sub-service not found");
-        }
-         console.log("third",subService);
-         
-        await ServiceModel.updateOne(
-            {
-                slug:slug,
-                "services.name": subService.name
-            },
-            {
-                $push:{
-                    "services.$.detailedSubService": newRelatedSubService
-                }
-            })
-        res.status(200).json("success")
+    if (!incomingPhone) {
+      console.log("No phone found in payload");
+      return res.sendStatus(200);
     }
-    catch{
-        res.status(500).send("Bad req")
-    }
-    })
 
+    // ⭐ Normalize phone
+    const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
 
-// =====================================================
-// SERVICE REQUEST APIs (Customer creates job)
-// =====================================================
+    // ⭐ Extract text
+    let text =
+      value?.messages?.[0]?.text?.body ||
+      value?.messages?.[0]?.button?.text ||
+      "";
 
-// Customer creates a service request (e.g., plumbing job)
-app.post("/service-request", async (req, res) => {
-    try {
-        const { serviceSlug, serviceName, serviceVisitingCharges,addons,customer,totalAmount } = req.body;
-        console.log("first", serviceSlug, serviceName, serviceVisitingCharges,addons,customer,totalAmount );
+    text = text.trim().toUpperCase();
 
-        // Find service by slug
-        const service = await ServiceModel.findOne({ slug: serviceSlug });
-        if (!service) {
-            res.status(400).send("No records found");
-            return;
-        }
-        // console.log("service",service);
-        // Create service request
-        const serviceReq = new ServiceRequest({
-            serviceId: service._id,
-            customerName: customer.name,
-            customerPhone: customer.phone,
-            serviceName: service.title,
-        });
+    console.log("Incoming Phone:", normalizedPhone);
+    console.log("Incoming Text:", text);
 
-        await serviceReq.save();
-        // console.log(serviceReq);
-        
-
-        // Fetch all active providers for this service
-        const providers = await Provider.find({
-            jobRole: serviceSlug,
-            isActive: true
-        });
-
-        console.log(providers);
-
-        // Create job notifications (simulation of WhatsApp sending)
-        for (const provider of providers) {
-            const jobNotification = new JobNotification({
-                serviceRequestId: serviceReq._id,
-                providerId: provider._id,
-            });
-            await jobNotification.save();
-
-            // Simulated WhatsApp message log
-            console.log(
-                `Sending job to ${provider.phoneNumber} | JobId: ${serviceReq._id}`
-            );
-        }
-
-        res.json("Request received successfully");
-    } catch (err) {
-        res.status(500).json("failed");
-    }
-});
-
-
-// Get all service requests OR filter by status (?status=pending/assigned)
-app.get("/service-request", async (req, res) => {
-    try {
-        const status = req.query.status;
-
-        // Validate status against schema enum
-        if (ServiceRequest.schema.paths.status.enumValues.includes(status)) {
-            const services = await ServiceRequest.find({ status });
-            res.json(services);
-            return;
-        }
-
-        if (status) {
-            res.status(400).send("Bad request");
-            return;
-        }
-
-        // Return all service requests
-        const services = await ServiceRequest.find({});
-        res.json(services);
-    } catch (err) {
-        res.status(500).send("something went wrong");
-    }
-});
-
-// Get single service request by ID (admin / debug use)
-app.get("/service-request/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const services = await ServiceRequest.findById(id);
-        res.json(services);
-    } catch (err) {
-        res.send("something went wrong");
-    }
-});
-
-
-// =====================================================
-// JOB ACCEPTANCE API (CORE BUSINESS LOGIC)
-// =====================================================
-
-// Provider accepts job (simulated / WhatsApp-ready)
-app.post("/service-request/accept", async (req, res) => {
-    const { source, serviceReqId, phoneNumber } = req.body;
-
-    console.log()
-
-    // Identify provider by phone number
-    const provider = await Provider.findOne({ phoneNumber });
+    // ⭐ Find provider
+    const provider = await Provider.findOne({
+      phoneNumber: normalizedPhone
+    });
 
     if (!provider) {
-        res.json("no providers found");
-        return;
+      console.log("Provider not found");
+      return res.sendStatus(200);
     }
 
-    console.log("provider",provider);
-    console.log(provider._id,new mongoose.Types.ObjectId(serviceReqId));
+    // ⭐ Update last interaction
+    provider.lastInteractionAt = new Date();
+    await provider.save();
 
-    // Check if this job was actually sent to this provider
-    const isJob = await JobNotification.find({
-        serviceRequestId: new mongoose.Types.ObjectId(serviceReqId),
-        providerId: provider._id
-    });
+    // ⭐ Find latest notification
+    const jobNotification = await JobNotification.findOne({
+      providerId: provider._id,
+      status: "sent"
+    }).sort({ createdAt: -1 });
 
-    console.log("job",isJob);
+    if (!jobNotification) {
 
-    if (isJob.length <= 0) {
-        res.json("cannot find this job");
-        return;
-    }
+  await sendWhatsAppText(
+    normalizedPhone,
+    "⚠️ This job is no longer available."
+  );
 
-    // Atomic lock: assign job only if still pending
-    const updateResult = await ServiceRequest.updateOne(
-        { _id: serviceReqId, status: "pending" },
+  console.log("No active JobNotification");
+  return res.sendStatus(200);
+}
+
+
+    // ===============================
+    // ⭐ YES HANDLER
+    // ===============================
+    if (text === "YES") {
+
+      console.log("YES received from provider");
+
+      const serviceReq = await ServiceRequest.findById(
+        jobNotification.serviceRequestId
+      );
+
+      if (!serviceReq) return res.sendStatus(200);
+
+      // ⭐ Atomic job lock
+      const update = await ServiceRequest.updateOne(
+        { _id: serviceReq._id, status: "pending" },
         { $set: { status: "assigned" } }
-    );
+      );
 
-    if (updateResult.modifiedCount === 0) {
-        res.json("Job already taken");
-        return;
+      // ⭐ If job already taken
+      if (update.modifiedCount === 0) {
+
+        await sendWhatsAppText(
+          normalizedPhone,
+          "⚠️ This job has already been taken."
+        );
+
+        console.log("Job already taken");
+        return res.sendStatus(200);
+      }
+
+      // ⭐ Create acceptance record
+      await JobAcceptance.create({
+        requestId: serviceReq._id,
+        providerId: provider._id,
+        providerName: provider.name,
+        providerPhone: provider.phoneNumber,
+        source: "whatsapp"
+      });
+
+      // ⭐ Mark this notification accepted
+      await JobNotification.updateOne(
+        { _id: jobNotification._id },
+        { $set: { status: "accepted" } }
+      );
+
+      // ⭐ OPTIONAL: expire other providers
+      await JobNotification.updateMany(
+        {
+          serviceRequestId: serviceReq._id,
+          _id: { $ne: jobNotification._id }
+        },
+        { $set: { status: "expired" } }
+      );
+
+      // ⭐ Send job confirmation template
+      await sendWhatsAppTemplate(
+        normalizedPhone,
+        process.env.GUPSHUP_JOB_ACCEPTED_TEMPLATE_ID,
+        [
+          serviceReq.customerName,
+          serviceReq.customerPhone,
+          serviceReq.customerAddress || "Address not available"
+        ]
+      );
+
+      console.log("Job accepted successfully");
     }
 
-    // Create acceptance record (winner only)
-    const jobAcceptance = new JobAcceptance({
-        requestId: serviceReqId,
-        providerId: provider._id,
-        source
-    });
+    // ===============================
+    // ⭐ NO HANDLER
+    // ===============================
+    if (text === "NO") {
 
-    await jobAcceptance.save();
+      console.log("Provider rejected job");
 
-    // Fetch service request to send customer details
-    const serviceReq = await ServiceRequest.findById(serviceReqId);
+      await JobNotification.updateOne(
+        { _id: jobNotification._id },
+        { $set: { status: "rejected" } }
+      );
+    }
 
-    res.json({
-        message: "Job accepted",
-        customerDetails: {
-            name: serviceReq.customerName,
-            phoneNumber: serviceReq.customerPhone
-        }
-    });
+    console.log("========== Webhook Completed ==========");
+
+  } catch (err) {
+    console.error("Webhook error:", err);
+  }
+
+  res.sendStatus(200);
 });
 
 
-// =====================================================
-// SERVER & DB STARTUP
-// =====================================================
+
+// ================= SERVER START =================
+const PORT = process.env.PORT || 7777;
 
 connectDB()
-    .then(() => {
-        console.log("connection established");
-        app.listen(7777, () => {
-            console.log("server running on port 7777");
-        });
-    })
-    .catch(() => {
-        console.error("error occurred");
-    });
-
+  .then(() => {
+    console.log("MongoDB connected");
+    app.listen(PORT, () =>
+      console.log(`Server running on port ${PORT}`)
+    );
+  })
+  .catch((err) => {
+    console.error("DB connection failed", err);
+  });

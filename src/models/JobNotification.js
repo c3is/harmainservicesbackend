@@ -1,27 +1,33 @@
-const mongoose= require("mongoose");
+const mongoose = require("mongoose");
 
-const JobNotificationRequest=mongoose.Schema({
-    serviceRequestId:{
-        type:mongoose.Schema.Types.ObjectId,
-        required:true,
-        ref:"ServiceRequest",
+const JobNotificationSchema = new mongoose.Schema(
+  {
+    serviceRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      ref: "ServiceRequest",
     },
-    providerId:{
-        type:mongoose.Schema.Types.ObjectId,
-        required:true,
-        ref:"Provider",
+
+    providerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      ref: "Provider",
     },
-    status:{
-        type:String,
-        enum:["sent"],
-        default:"sent"
-    },
-    source:{
-        type:String,
-        enum:["whatsapp","simulation","admin"],
-        default:"simulation"
+
+    status: {
+      type: String,
+      enum: ["created", "sent", "accepted", "rejected", "expired"],
+      default: "created",
     }
-},{timestamps:true});
+  },
+  {
+    timestamps: true
+  }
+);
 
-const JobNotification=mongoose.model("JobNotificationRequest",JobNotificationRequest);
-module.exports={JobNotification};
+// ⭐ Safe model compilation (prevents overwrite error)
+const JobNotification =
+  mongoose.models.JobNotification ||
+  mongoose.model("JobNotification", JobNotificationSchema);
+
+module.exports = { JobNotification };

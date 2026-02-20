@@ -1,77 +1,83 @@
 {
-  "slug": "medical-diagnoses",
-  "title": "Medical Diagnoses",
-  "category": "healthcare",
-  "heroImg": "/images/services/medical/hero.webp",
-  "description": "We provide fast and reliable electronics repair for everyday devices. Accurate diagnosis, careful handling, and repairs that bring your equipment back to proper working condition.",
-  "Icon": "Medical",
+  "title": "Cleaning",
+  "slug": "cleaning",
+  "category": "Laundry",
+  "heroImg": "/images/services/cleaning/hero.webp",
+  "description": "Professional laundry and cleaning services",
+  "Icon": "Carpet",
   "services": [
     {
-      "name": "Modern Diagnosis Labs",
-      "image": "/images/services/medical/lab1.webp",
-      "isBookNow": true,
+      "name": "Carpet & Sofa Cleaning",
+      "image": "/images/services/cleaning/book1.webp",
       "detailedSubService": [
-        {
-          "name": "Full Body Medical Checkup",
-          "price": 999,
-          "note": "Includes Serum Iron, TSH, T3, T4, Lipid Profile, KFT, LFT, CBC, Blood Sugar",
-          "image": "/images/services/medical/1.webp"
-        },
-        {
-          "name": "BSF",
-          "price": 70,
-          "image": "/images/services/medical/2.webp"
-        },
-        {
-          "name": "ESF",
-          "price": 70,
-          "image": "/images/services/medical/3.webp"
-        },
-        {
-          "name": "KFT",
-          "price": 400,
-          "image": "/images/services/medical/4.webp"
-        },
-        {
-          "name": "LFT",
-          "price": 400,
-          "image": "/images/services/medical/5.webp"
-        },
-        {
-          "name": "Vitamin D3",
-          "price": 800,
-          "image": "/images/services/medical/6.webp"
-        },
-        {
-          "name": "TSH",
-          "price": 150,
-          "image": "/images/services/medical/7.webp"
-        },
-        {
-          "name": "Lipid Profile",
-          "price": 400,
-          "image": "/images/services/medical/8.webp"
-        },
-        {
-          "name": "CBC",
-          "price": 200,
-          "image": "/images/services/medical/9.webp"
-        },
-        {
-          "name": "Iron",
-          "price": 300,
-          "image": "/images/services/medical/10.webp"
-        }
+        { "name": "Cotton & Synthetic", "price": 200 },
+        { "name": "Silk Velvet & Jute", "price": 250 },
+        { "name": "Leather", "price": 300 },
+        { "name": "Single Carpet Sq.ft", "price": 10 },
+        { "name": "More Than 1 Carpet Sq.ft", "price": 8 },
+        { "name": "Carpet Pickup Drop Sq.ft", "price": 14 }
+      ]
+    },
+    {
+      "name": "Mens",
+      "image": "/images/services/cleaning/book2.webp",
+      "detailedSubService": [
+        { "name": "Waist Coat", "price": 199 },
+        { "name": "Kurta Shalwar Heavy", "price": 299 },
+        { "name": "Kurta Basic", "price": 199 },
+        { "name": "Coat", "price": 299 },
+        { "name": "Jacket", "price": 249 },
+        { "name": "Suit 2 Piece", "price": 399 },
+        { "name": "Suit 3 Piece", "price": 499 },
+        { "name": "Sweater", "price": 199 },
+        { "name": "Hoodies/Sweatshirt", "price": 299 },
+        { "name": "Thermals", "priceInfo": "99/199" },
+        { "name": "Socks Pair", "price": 20 }
+      ]
+    },
+    {
+      "name": "Womens",
+      "image": "/images/services/cleaning/book3.webp",
+      "detailedSubService": [
+        { "name": "2 Piece Suit Basic", "price": 199 },
+        { "name": "2 Piece Suit Heavy", "price": 299 },
+        { "name": "3 Piece Suit Basic", "price": 299 },
+        { "name": "3 Piece Suit Heavy", "price": 399 },
+        { "name": "Dupatta", "price": 99 },
+        { "name": "Lehanga/Gown", "price": 500 },
+        { "name": "Lehanga Heavy", "price": 800 },
+        { "name": "Shawl", "price": 299 },
+        { "name": "Shawl Heavy", "price": 349 },
+        { "name": "Thermal", "priceInfo": "99/199" }
+      ]
+    },
+    {
+      "name": "Kids",
+      "image": "/images/services/cleaning/book4.webp",
+      "detailedSubService": [
+        { "name": "Dress", "price": 249 },
+        { "name": "Skirt Suit", "price": 199 },
+        { "name": "Frock", "price": 149 },
+        { "name": "Coat", "price": 199 },
+        { "name": "Jacket", "price": 149 },
+        { "name": "Soft Toy Small", "price": 200 },
+        { "name": "Soft Toy Medium", "price": 300 },
+        { "name": "Soft Toy Large", "price": 450 }
+      ]
+    },
+    {
+      "name": "Home",
+      "image": "/images/services/cleaning/book5.webp",
+      "detailedSubService": [
+        { "name": "Double Bed Blanket", "price": 350 },
+        { "name": "Single Bed Blanket", "price": 250 },
+        { "name": "Bed Sheet Double", "price": 199 },
+        { "name": "Bed Sheet Single", "price": 149 },
+        { "name": "Curtain With Lining", "price": 150 },
+        { "name": "Curtain Without Lining", "price": 100 },
+        { "name": "Mattress Single", "price": 999 },
+        { "name": "Mattress Double", "price": 1999 }
       ]
     }
-  ],
-  "seoTitle": "Medical Diagnostic Tests & Health Checkups",
-  "seoDescription": "Book medical diagnostic tests including full body checkups, blood tests, vitamin tests, and lab investigations.",
-  "keywords": [
-    "medical diagnosis",
-    "health checkup",
-    "blood tests",
-    "lab tests",
-    "diagnostic services"
   ]
 }

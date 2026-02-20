@@ -1,10 +1,16 @@
-const mongoose=require("mongoose");
+const mongoose = require("mongoose");
 
-const  connectDB= async()=>{
-    await mongoose.connect("mongodb+srv://kamraanwani_db_user:iA5A4bN1q4aGal7d@practicecluster.u0qxqdz.mongodb.net/ServicesDB");
-}
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: "ServicesDB",
+    });
 
+    console.log("✅ MongoDB connected to ServicesDB");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
+  }
+};
 
-module.exports={
-    connectDB
-}
+module.exports = { connectDB };

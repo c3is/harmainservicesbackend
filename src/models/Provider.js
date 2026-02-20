@@ -13,6 +13,7 @@ const providerSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      default: "7718908727"
     },
     jobRole: [String],
     isActive: {
@@ -21,8 +22,13 @@ const providerSchema = new mongoose.Schema(
     },
     isAvailable: {
       type: Boolean,
-      required: true,
+      default: true,
     },
+    lastInteractionAt: {
+  type: Date,
+  default: null
+}
+
   },
   {
     timestamps: true,

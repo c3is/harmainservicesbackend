@@ -52,6 +52,9 @@
     }, { _id: false });
 
     const serviceModel=new mongoose.Schema({
+        details:{
+            type:String
+        },
         slug:{
             type:String,
             required:true,
