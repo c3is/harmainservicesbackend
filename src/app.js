@@ -77,6 +77,132 @@ app.get("/providers/:service", async (req, res) => {
   }
 });
 
+// ================= GET PROVIDER BY ID =================
+// Used by admin panel or debugging to fetch full provider details
+// Example: GET /provider/65abc123
+app.get("/provider/:id", async (req, res) => {
+  try {
+    const provider = await Provider.findById(req.params.id);
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json(provider);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch provider" });
+  }
+});
+
+// ================= LIST ALL PROVIDERS =================
+// Returns all providers for admin monitoring or management
+// Example: GET /providers
+app.get("/providers", async (req, res) => {
+  try {
+    const providers = await Provider.find({}).sort({ createdAt: -1 });
+    res.json(providers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch providers" });
+  }
+});
+
+// ================= UPDATE PROVIDER =================
+// Allows admin to update provider details like name, phone, roles, availability
+// Example: PUT /provider/65abc123
+app.put("/provider/:id", async (req, res) => {
+  try {
+
+    const updates = { ...req.body };
+
+    // Normalize job roles if provided
+    if (updates.jobRole) {
+      updates.jobRole = updates.jobRole.map(r => r.toLowerCase());
+    }
+
+    // Normalize phone if provided
+    if (updates.phoneNumber) {
+      updates.phoneNumber = updates.phoneNumber.replace(/\D/g, "").slice(-10);
+    }
+
+    const provider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json({
+      message: "Provider updated",
+      provider
+    });
+
+  } catch (err) {
+
+    // Handle duplicate phone number error
+    if (err.code === 11000) {
+      return res.status(400).json({ message: "Phone number already exists" });
+    }
+
+    console.error(err);
+    res.status(500).json({ message: "Failed to update provider" });
+  }
+});
+
+// ================= DELETE PROVIDER =================
+// Permanently removes provider from database
+// Use carefully — job history will remain but provider record is gone
+// Example: DELETE /provider/65abc123
+app.delete("/provider/:id", async (req, res) => {
+  try {
+
+    const provider = await Provider.findByIdAndDelete(req.params.id);
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json({ message: "Provider deleted successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to delete provider" });
+  }
+});
+
+// ================= DEACTIVATE PROVIDER =================
+// Soft delete — marks provider inactive so they won't receive jobs
+// Keeps historical records intact
+// Example: PATCH /provider/65abc123/deactivate
+app.patch("/provider/:id/deactivate", async (req, res) => {
+  try {
+
+    const provider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json({
+      message: "Provider deactivated",
+      provider
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to deactivate provider" });
+  }
+});
+
 // ================= SERVICE MASTER APIs =================
 app.post("/service", async (req, res) => {
   try {
@@ -95,18 +221,21 @@ app.get("/services", async (req, res) => {
 
 
 
+// ================= GET SERVICE SLUGS + TITLES =================
+// Returns lightweight list of services for dropdowns or navigation
+// Example response: [{ slug: "electrician", title: "Electrician" }]
 app.get("/services/slugs", async (req, res) => {
   try {
-    const slugs = await ServiceModel.distinct("slug");
-    res.json(slugs);
+
+    const services = await ServiceModel.find({}, "slug title");
+
+    res.json(services);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch slugs" });
+    res.status(500).json({ message: "Failed to fetch services list" });
   }
 });
-
-
-
 
 
 app.get("/service/:slug", async (req, res) => {
@@ -115,6 +244,86 @@ app.get("/service/:slug", async (req, res) => {
   res.json(service);
 });
 
+// ================= UPDATE SERVICE =================
+// Allows admin to update service details like title, slug, description, etc
+// Example: PUT /service/65abc123
+app.put("/service/:id", async (req, res) => {
+  try {
+
+    const service = await ServiceModel.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!service) {
+      return res.status(404).json({ message: "Service not found" });
+    }
+
+    res.json({
+      message: "Service updated",
+      service
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update service" });
+  }
+});
+
+// ================= DELETE SERVICE =================
+// Removes a service from the system
+// Use carefully — existing requests may still reference it
+// Example: DELETE /service/65abc123
+app.delete("/service/:id", async (req, res) => {
+  try {
+
+    const service = await ServiceModel.findByIdAndDelete(req.params.id);
+
+    if (!service) {
+      return res.status(404).json({ message: "Service not found" });
+    }
+
+    res.json({
+      message: "Service deleted successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to delete service" });
+  }
+});
+
+
+// ================= TOGGLE PROVIDER AVAILABILITY =================
+// Marks provider as available or unavailable for receiving new jobs
+// Example: PATCH /provider/65abc123/availability
+// Body: { "isAvailable": false }
+app.patch("/provider/:id/availability", async (req, res) => {
+  try {
+
+    const { isAvailable } = req.body;
+
+    const provider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      { isAvailable },
+      { new: true }
+    );
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider not found" });
+    }
+
+    res.json({
+      message: "Availability updated",
+      provider
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update availability" });
+  }
+});
 // ================= SERVICE REQUEST =================
 app.post("/service-request", async (req, res) => {
   try {
@@ -128,7 +337,11 @@ app.post("/service-request", async (req, res) => {
       serviceName: service.title,
       customerName: customer.name,
       customerPhone: customer.phone,
-      customerAddress: customer.address,
+      customerAddress: customer.addresses,
+      selectedCategory,
+      serviceAddons,
+      totalAmount,
+      preferredDate: customer.preferredDate,
     });
 
     await serviceReq.save();
@@ -197,6 +410,74 @@ Reply YES to accept`
   } catch (err) {
     console.error(err);
     res.status(500).send("Failed to create request");
+  }
+});
+
+// ================= LIST SERVICE REQUESTS =================
+// Returns all service requests sorted by newest first
+// Useful for admin dashboard and monitoring
+// Example: GET /service-requests
+app.get("/service-requests", async (req, res) => {
+  try {
+
+    const requests = await ServiceRequest.find({})
+      .sort({ createdAt: -1 });
+
+    res.json(requests);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch service requests" });
+  }
+});
+
+// ================= GET SERVICE REQUEST BY ID =================
+// Returns detailed info about a specific job
+// Example: GET /service-request/65abc123
+app.get("/service-request/:id", async (req, res) => {
+  try {
+
+    const request = await ServiceRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({ message: "Service request not found" });
+    }
+
+    res.json(request);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch service request" });
+  }
+});
+
+// ================= CANCEL SERVICE REQUEST =================
+// Allows admin or system to cancel a job
+// Example: PATCH /service-request/65abc123/cancel
+app.patch("/service-request/:id/cancel", async (req, res) => {
+  try {
+
+    const request = await ServiceRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({ message: "Service request not found" });
+    }
+
+    if (request.status === "cancelled") {
+      return res.json({ message: "Request already cancelled" });
+    }
+
+    request.status = "cancelled";
+    await request.save();
+
+    res.json({
+      message: "Service request cancelled",
+      request
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to cancel request" });
   }
 });
 
@@ -358,7 +639,9 @@ app.post("/webhook/whatsapp", async (req, res) => {
   res.sendStatus(200);
 });
 
-
+app.get("/health", (req, res) => {
+  res.send("OK");
+});
 
 // ================= SERVER START =================
 const PORT = process.env.PORT || 7777;
