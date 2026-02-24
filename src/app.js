@@ -327,11 +327,31 @@ app.patch("/provider/:id/availability", async (req, res) => {
 // ================= SERVICE REQUEST =================
 app.post("/service-request", async (req, res) => {
   try {
-    const { serviceSlug, customer } = req.body;
+    const {
+      serviceSlug,
+      selectedCategory,
+      serviceAddons,
+      totalAmount,
+      customer
+    } = req.body;
+
+    // Validate customer payload
+    if (!customer?.name || !customer?.phone) {
+      return res.status(400).send("Customer info missing");
+    }
 
     const service = await ServiceModel.findOne({ slug: serviceSlug });
     if (!service) return res.status(400).send("Invalid service");
 
+    // Helper — public location only
+    function publicLocation(addr) {
+      if (!addr) return "Location not provided";
+      return [addr.area, addr.district].filter(Boolean).join(", ") || "Location not provided";
+    }
+
+    const locationText = publicLocation(customer.addresses);
+
+    // Save request (full address still stored privately)
     const serviceReq = new ServiceRequest({
       serviceId: service._id,
       serviceName: service.title,
@@ -341,15 +361,20 @@ app.post("/service-request", async (req, res) => {
       selectedCategory,
       serviceAddons,
       totalAmount,
-      preferredDate: customer.preferredDate,
+      preferredDate: customer.preferredDate
     });
 
     await serviceReq.save();
 
+    // Only active + available providers
     const providers = await Provider.find({
       jobRole: serviceSlug.toLowerCase(),
-      isActive: true,
+      isActive: true
     });
+
+    if (!providers.length) {
+      console.log("⚠️ No providers available for this service");
+    }
 
     console.log("Providers found:", providers.length);
 
@@ -373,31 +398,35 @@ app.post("/service-request", async (req, res) => {
 
           await sendWhatsAppText(
             provider.phoneNumber,
-            `New job request 🔧
-Location: ${customer.address || "Not provided"}
-Reply YES to accept`
+            `Hello ${provider.name},
+
+You have received a new job request.
+
+Location: ${locationText}
+
+Reply YES to accept or NO to decline.`
           );
 
         } else {
 
-          console.log("🔵 Sending TEMPLATE message");
+          console.log("🔵 Sending BUTTON TEMPLATE");
+          console.log("Using template:", process.env.GUPSHUP_JOB_BUTTON_TEMPLATE_ID);
 
           await sendWhatsAppTemplate(
             provider.phoneNumber,
-            process.env.GUPSHUP_JOB_TEMPLATE_ID,
+            process.env.GUPSHUP_JOB_BUTTON_TEMPLATE_ID,
             [
               provider.name,
-              customer.address || "Location not provided",
-              new Date().toLocaleString("en-IN"),
+              locationText,
+              new Date().toLocaleString("en-IN")
             ]
           );
 
         }
 
-        // ⭐ IMPORTANT
         await JobNotification.updateOne(
           { _id: jobNotification._id },
-          { $set: { status: "sent" } }
+          { status: "sent" }
         );
 
       } catch (err) {
@@ -483,6 +512,16 @@ app.patch("/service-request/:id/cancel", async (req, res) => {
 
 
 // ================= JOB ACCEPT =================
+// ===== Helper — send only public location =====
+function formatPublicLocation(addr) {
+  if (!addr) return "Location not available";
+
+  return [
+    addr.area,
+    addr.district
+  ].filter(Boolean).join(", ") || "Location not available";
+}
+
 app.post("/webhook/whatsapp", async (req, res) => {
   try {
 
@@ -493,22 +532,25 @@ app.post("/webhook/whatsapp", async (req, res) => {
     const change = entry?.changes?.[0];
     const value = change?.value;
 
+    // Ignore delivery/read events
+    if (!value?.messages?.length) return res.sendStatus(200);
+
     const incomingPhone =
-      value?.messages?.[0]?.from ||
-      value?.contacts?.[0]?.wa_id;
+      value.messages[0]?.from ||
+      value.contacts?.[0]?.wa_id;
 
     if (!incomingPhone) {
       console.log("No phone found in payload");
       return res.sendStatus(200);
     }
 
-    // ⭐ Normalize phone
+    // Normalize phone
     const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
 
-    // ⭐ Extract text
+    // Extract text or button label
     let text =
-      value?.messages?.[0]?.text?.body ||
-      value?.messages?.[0]?.button?.text ||
+      value.messages[0]?.text?.body ||
+      value.messages[0]?.button?.text ||
       "";
 
     text = text.trim().toUpperCase();
@@ -516,7 +558,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
     console.log("Incoming Phone:", normalizedPhone);
     console.log("Incoming Text:", text);
 
-    // ⭐ Find provider
+    // Find provider
     const provider = await Provider.findOne({
       phoneNumber: normalizedPhone
     });
@@ -526,11 +568,11 @@ app.post("/webhook/whatsapp", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // ⭐ Update last interaction
+    // Update last interaction
     provider.lastInteractionAt = new Date();
     await provider.save();
 
-    // ⭐ Find latest notification
+    // Get latest active notification
     const jobNotification = await JobNotification.findOne({
       providerId: provider._id,
       status: "sent"
@@ -538,19 +580,16 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     if (!jobNotification) {
 
-  await sendWhatsAppText(
-    normalizedPhone,
-    "⚠️ This job is no longer available."
-  );
+      await sendWhatsAppText(
+        normalizedPhone,
+        "⚠️ This job is no longer available."
+      );
 
-  console.log("No active JobNotification");
-  return res.sendStatus(200);
-}
+      console.log("No active JobNotification");
+      return res.sendStatus(200);
+    }
 
-
-    // ===============================
-    // ⭐ YES HANDLER
-    // ===============================
+    // ================= YES HANDLER =================
     if (text === "YES") {
 
       console.log("YES received from provider");
@@ -561,13 +600,12 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
       if (!serviceReq) return res.sendStatus(200);
 
-      // ⭐ Atomic job lock
+      // Atomic lock
       const update = await ServiceRequest.updateOne(
         { _id: serviceReq._id, status: "pending" },
         { $set: { status: "assigned" } }
       );
 
-      // ⭐ If job already taken
       if (update.modifiedCount === 0) {
 
         await sendWhatsAppText(
@@ -579,7 +617,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // ⭐ Create acceptance record
+      // Record acceptance
       await JobAcceptance.create({
         requestId: serviceReq._id,
         providerId: provider._id,
@@ -588,45 +626,43 @@ app.post("/webhook/whatsapp", async (req, res) => {
         source: "whatsapp"
       });
 
-      // ⭐ Mark this notification accepted
+      // Mark accepted
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { $set: { status: "accepted" } }
+        { status: "accepted" }
       );
 
-      // ⭐ OPTIONAL: expire other providers
+      // Expire others
       await JobNotification.updateMany(
         {
           serviceRequestId: serviceReq._id,
           _id: { $ne: jobNotification._id }
         },
-        { $set: { status: "expired" } }
+        { status: "expired" }
       );
 
-      // ⭐ Send job confirmation template
+      // Send confirmation — only public location
       await sendWhatsAppTemplate(
         normalizedPhone,
         process.env.GUPSHUP_JOB_ACCEPTED_TEMPLATE_ID,
         [
           serviceReq.customerName,
           serviceReq.customerPhone,
-          serviceReq.customerAddress || "Address not available"
+          formatPublicLocation(serviceReq.customerAddress)
         ]
       );
 
       console.log("Job accepted successfully");
     }
 
-    // ===============================
-    // ⭐ NO HANDLER
-    // ===============================
+    // ================= NO HANDLER =================
     if (text === "NO") {
 
       console.log("Provider rejected job");
 
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { $set: { status: "rejected" } }
+        { status: "rejected" }
       );
     }
 
