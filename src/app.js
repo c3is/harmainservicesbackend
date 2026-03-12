@@ -268,6 +268,132 @@ app.delete("/service/:id", async (req, res) => {
   }
 });
 
+// Update subservice
+app.put("/service/:serviceId/subservice/:subServiceName", async (req, res) => {
+  try {
+    const { serviceId, subServiceName } = req.params;
+
+    const service = await ServiceModel.findById(serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    const subService = service.services.find(
+      (s) => s.name.toLowerCase() === subServiceName.toLowerCase()
+    );
+
+    if (!subService)
+      return res.status(404).json({ message: "Subservice not found" });
+
+    Object.assign(subService, req.body);
+
+    await service.save();
+
+    res.json({
+      message: "Subservice updated",
+      subService
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to update subservice" });
+  }
+});
+
+// Delete subservice
+app.delete("/service/:serviceId/subservice/:subServiceName", async (req, res) => {
+  try {
+    const { serviceId, subServiceName } = req.params;
+
+    const service = await ServiceModel.findById(serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    service.services = service.services.filter(
+      (s) => s.name.toLowerCase() !== subServiceName.toLowerCase()
+    );
+
+    await service.save();
+
+    res.json({
+      message: "Subservice deleted"
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to delete subservice" });
+  }
+});
+
+// Update detailed subservice
+app.put("/service/:serviceId/subservice/:subServiceName/detail/:detailName", async (req, res) => {
+  try {
+    const { serviceId, subServiceName, detailName } = req.params;
+
+    const service = await ServiceModel.findById(serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    const subService = service.services.find(
+      (s) => s.name.toLowerCase() === subServiceName.toLowerCase()
+    );
+
+    if (!subService)
+      return res.status(404).json({ message: "Subservice not found" });
+
+    const detail = subService.detailedSubService.find(
+      (d) => d.name.toLowerCase() === detailName.toLowerCase()
+    );
+
+    if (!detail)
+      return res.status(404).json({ message: "Detailed service not found" });
+
+    Object.assign(detail, req.body);
+
+    await service.save();
+
+    res.json({
+      message: "Detailed subservice updated",
+      detail
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to update detailed subservice" });
+  }
+});
+
+// Delete detailed subservice
+app.delete("/service/:serviceId/subservice/:subServiceName/detail/:detailName", async (req, res) => {
+  try {
+    const { serviceId, subServiceName, detailName } = req.params;
+
+    const service = await ServiceModel.findById(serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    const subService = service.services.find(
+      (s) => s.name.toLowerCase() === subServiceName.toLowerCase()
+    );
+
+    if (!subService)
+      return res.status(404).json({ message: "Subservice not found" });
+
+    subService.detailedSubService = subService.detailedSubService.filter(
+      (d) => d.name.toLowerCase() !== detailName.toLowerCase()
+    );
+
+    await service.save();
+
+    res.json({
+      message: "Detailed subservice deleted"
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to delete detailed subservice" });
+  }
+});
+
 // ================= SERVICE REQUESTS =================
 
 // Create new service request
