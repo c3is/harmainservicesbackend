@@ -199,6 +199,29 @@ app.patch("/provider/:id/availability", async (req, res) => {
   }
 });
 
+// Activate a Deactivated Provider
+app.patch("/provider/:id/activate", async (req, res) => {
+  try {
+
+    const provider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      { isActive: true },
+      { new: true }
+    );
+
+    if (!provider)
+      return res.status(404).json({ message: "Provider not found" });
+
+    res.json({
+      message: "Provider activated",
+      provider
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to activate provider" });
+  }
+});
+
 // ================= SERVICES =================
 
 // Create service
@@ -819,6 +842,22 @@ app.get("/service-request/:id/details", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch request details" });
+  }
+});
+
+// Get Single Service Request
+app.get("/service-request/:id", async (req, res) => {
+  try {
+
+    const request = await ServiceRequest.findById(req.params.id);
+
+    if (!request)
+      return res.status(404).json({ message: "Service request not found" });
+
+    res.json(request);
+
+  } catch {
+    res.status(500).json({ message: "Failed to fetch service request" });
   }
 });
 
