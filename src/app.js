@@ -17,7 +17,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-
 // ================= HELPERS =================
 
 function formatDestination(phone) {
@@ -27,7 +26,6 @@ function formatDestination(phone) {
 
 async function sendWhatsAppText(destination, text) {
   try {
-
     const formattedDestination = formatDestination(destination);
 
     await axios.post(
@@ -36,16 +34,15 @@ async function sendWhatsAppText(destination, text) {
         channel: "whatsapp",
         source: process.env.GUPSHUP_SOURCE_NUMBER,
         destination: formattedDestination,
-        message: JSON.stringify({ type: "text", text })
+        message: JSON.stringify({ type: "text", text }),
       }),
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          apikey: process.env.GUPSHUP_API_KEY
-        }
-      }
+          apikey: process.env.GUPSHUP_API_KEY,
+        },
+      },
     );
-
   } catch (err) {
     console.error("WhatsApp text error:", err?.response?.data || err.message);
   }
@@ -53,29 +50,32 @@ async function sendWhatsAppText(destination, text) {
 
 function publicLocation(addr) {
   if (!addr) return "Location not provided";
-  return [addr.area, addr.district].filter(Boolean).join(", ") || "Location not provided";
+  return (
+    [addr.area, addr.district].filter(Boolean).join(", ") ||
+    "Location not provided"
+  );
 }
 
 function formatPublicLocation(addr) {
   if (!addr) return "Location not available";
-  return [addr.area, addr.district].filter(Boolean).join(", ") || "Location not available";
+  return (
+    [addr.area, addr.district].filter(Boolean).join(", ") ||
+    "Location not available"
+  );
 }
-
 
 // ================= PROVIDERS =================
 
 // Create new provider
 app.post("/provider", async (req, res) => {
   try {
-
     const provider = new Provider({
       ...req.body,
-      jobRole: req.body.jobRole.map(r => r.toLowerCase())
+      jobRole: req.body.jobRole.map((r) => r.toLowerCase()),
     });
 
     await provider.save();
     res.json("Provider Saved");
-
   } catch {
     res.status(500).send("Something went wrong");
   }
@@ -84,10 +84,8 @@ app.post("/provider", async (req, res) => {
 // Get all providers
 app.get("/providers", async (req, res) => {
   try {
-
     const providers = await Provider.find({}).sort({ createdAt: -1 });
     res.json(providers);
-
   } catch {
     res.status(500).send("Failed to fetch providers");
   }
@@ -96,12 +94,11 @@ app.get("/providers", async (req, res) => {
 // Get provider by ID
 app.get("/provider/:id", async (req, res) => {
   try {
-
     const provider = await Provider.findById(req.params.id);
-    if (!provider) return res.status(404).json({ message: "Provider not found" });
+    if (!provider)
+      return res.status(404).json({ message: "Provider not found" });
 
     res.json(provider);
-
   } catch {
     res.status(500).json({ message: "Failed to fetch provider" });
   }
@@ -110,15 +107,13 @@ app.get("/provider/:id", async (req, res) => {
 // Get providers by service role
 app.get("/providers/:service", async (req, res) => {
   try {
-
     const providers = await Provider.find({
       jobRole: req.params.service.toLowerCase(),
       isActive: true,
-      isAvailable: true
+      isAvailable: true,
     });
 
     res.json(providers);
-
   } catch {
     res.status(500).send("Error fetching providers");
   }
@@ -127,27 +122,24 @@ app.get("/providers/:service", async (req, res) => {
 // Update provider details
 app.put("/provider/:id", async (req, res) => {
   try {
-
     const updates = { ...req.body };
 
     if (updates.jobRole)
-      updates.jobRole = updates.jobRole.map(r => r.toLowerCase());
+      updates.jobRole = updates.jobRole.map((r) => r.toLowerCase());
 
     if (updates.phoneNumber)
       updates.phoneNumber = updates.phoneNumber.replace(/\D/g, "").slice(-10);
 
-    const provider = await Provider.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true }
-    );
+    const provider = await Provider.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
 
-    if (!provider) return res.status(404).json({ message: "Provider not found" });
+    if (!provider)
+      return res.status(404).json({ message: "Provider not found" });
 
     res.json({ message: "Provider updated", provider });
-
   } catch (err) {
-
     if (err.code === 11000)
       return res.status(400).json({ message: "Phone number already exists" });
 
@@ -158,14 +150,12 @@ app.put("/provider/:id", async (req, res) => {
 // Delete provider permanently
 app.delete("/provider/:id", async (req, res) => {
   try {
-
     const provider = await Provider.findByIdAndDelete(req.params.id);
 
     if (!provider)
       return res.status(404).json({ message: "Provider not found" });
 
     res.json({ message: "Provider deleted successfully" });
-
   } catch {
     res.status(500).json({ message: "Failed to delete provider" });
   }
@@ -174,18 +164,16 @@ app.delete("/provider/:id", async (req, res) => {
 // Deactivate provider (soft delete)
 app.patch("/provider/:id/deactivate", async (req, res) => {
   try {
-
     const provider = await Provider.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
-      { new: true }
+      { new: true },
     );
 
     if (!provider)
       return res.status(404).json({ message: "Provider not found" });
 
     res.json({ message: "Provider deactivated", provider });
-
   } catch {
     res.status(500).json({ message: "Failed to deactivate provider" });
   }
@@ -194,37 +182,32 @@ app.patch("/provider/:id/deactivate", async (req, res) => {
 // Update provider availability
 app.patch("/provider/:id/availability", async (req, res) => {
   try {
-
     const { isAvailable } = req.body;
 
     const provider = await Provider.findByIdAndUpdate(
       req.params.id,
       { isAvailable },
-      { new: true }
+      { new: true },
     );
 
     if (!provider)
       return res.status(404).json({ message: "Provider not found" });
 
     res.json({ message: "Availability updated", provider });
-
   } catch {
     res.status(500).json({ message: "Failed to update availability" });
   }
 });
-
 
 // ================= SERVICES =================
 
 // Create service
 app.post("/service", async (req, res) => {
   try {
-
     const service = new ServiceModel(req.body);
     await service.save();
 
     res.send("Service saved");
-
   } catch {
     res.status(500).send("Service creation failed");
   }
@@ -239,10 +222,8 @@ app.get("/services", async (req, res) => {
 // Get service slugs for dropdown/navigation
 app.get("/services/slugs", async (req, res) => {
   try {
-
-    const services = await ServiceModel.find({}, "slug title");
+    const services = await ServiceModel.find({}, "slug title heroImg");
     res.json(services);
-
   } catch {
     res.status(500).json({ message: "Failed to fetch services list" });
   }
@@ -250,11 +231,9 @@ app.get("/services/slugs", async (req, res) => {
 
 // Get single service by slug
 app.get("/service/:slug", async (req, res) => {
-
   const service = await ServiceModel.findOne({ slug: req.params.slug });
 
-  if (!service)
-    return res.status(404).send("Not found");
+  if (!service) return res.status(404).send("Not found");
 
   res.json(service);
 });
@@ -262,18 +241,15 @@ app.get("/service/:slug", async (req, res) => {
 // Update service
 app.put("/service/:id", async (req, res) => {
   try {
-
     const service = await ServiceModel.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
-    if (!service)
-      return res.status(404).json({ message: "Service not found" });
+    if (!service) return res.status(404).json({ message: "Service not found" });
 
     res.json({ message: "Service updated", service });
-
   } catch {
     res.status(500).json({ message: "Failed to update service" });
   }
@@ -282,28 +258,28 @@ app.put("/service/:id", async (req, res) => {
 // Delete service
 app.delete("/service/:id", async (req, res) => {
   try {
-
     const service = await ServiceModel.findByIdAndDelete(req.params.id);
 
-    if (!service)
-      return res.status(404).json({ message: "Service not found" });
+    if (!service) return res.status(404).json({ message: "Service not found" });
 
     res.json({ message: "Service deleted successfully" });
-
   } catch {
     res.status(500).json({ message: "Failed to delete service" });
   }
 });
 
-
 // ================= SERVICE REQUESTS =================
 
 // Create new service request
 app.post("/service-request", async (req, res) => {
-
   try {
-
-    const { serviceSlug, selectedCategory, serviceAddons, totalAmount, customer } = req.body;
+    const {
+      serviceSlug,
+      selectedCategory,
+      serviceAddons,
+      totalAmount,
+      customer,
+    } = req.body;
 
     if (!customer?.name || !customer?.phone)
       return res.status(400).send("Customer info missing");
@@ -322,25 +298,23 @@ app.post("/service-request", async (req, res) => {
       selectedCategory,
       serviceAddons,
       totalAmount,
-      preferredDate: customer.preferredDate
+      preferredDate: customer.preferredDate,
     });
 
     await serviceReq.save();
 
     const providers = await Provider.find({
-  jobRole: serviceSlug.toLowerCase(),
-  isActive: true,
-  isAvailable: true
-});
+      jobRole: serviceSlug.toLowerCase(),
+      isActive: true,
+      isAvailable: true,
+    });
 
     for (const provider of providers) {
-
       try {
-
         const jobNotification = await JobNotification.create({
           serviceRequestId: serviceReq._id,
           providerId: provider._id,
-          status: "created"
+          status: "created",
         });
 
         const now = new Date();
@@ -350,7 +324,6 @@ app.post("/service-request", async (req, res) => {
           now - provider.lastInteractionAt < 24 * 60 * 60 * 1000;
 
         if (sessionActive) {
-
           await sendWhatsAppText(
             provider.phoneNumber,
             `Hello ${provider.name},
@@ -359,34 +332,26 @@ You have received a new job request.
 
 Location: ${locationText}
 
-Reply YES to accept or NO to decline.`
+Reply YES to accept or NO to decline.`,
           );
-
         } else {
-
           await sendWhatsAppTemplate(
             provider.phoneNumber,
             process.env.GUPSHUP_JOB_BUTTON_TEMPLATE_ID,
-            [
-              provider.name,
-              locationText,
-              new Date().toLocaleString("en-IN")
-            ]
+            [provider.name, locationText, new Date().toLocaleString("en-IN")],
           );
         }
 
         await JobNotification.updateOne(
           { _id: jobNotification._id },
-          { status: "sent" }
+          { status: "sent" },
         );
-
       } catch (err) {
         console.error("Provider failed:", provider.phoneNumber);
       }
     }
 
     res.json("Service request created");
-
   } catch {
     res.status(500).send("Failed to create request");
   }
@@ -394,94 +359,76 @@ Reply YES to accept or NO to decline.`
 
 // Get service requests (optionally filter by status)
 app.get("/service-requests", async (req, res) => {
-
   try {
-
     const filter = {};
 
     if (req.query.status) {
       filter.status = req.query.status;
     }
 
-    const requests = await ServiceRequest
-      .find(filter)
-      .sort({ createdAt: -1 });
+    const requests = await ServiceRequest.find(filter).sort({ createdAt: -1 });
 
     res.json(requests);
-
   } catch {
     res.status(500).json({ message: "Failed to fetch service requests" });
   }
-
 });
-
 
 // ================= WHATSAPP WEBHOOK =================
 
 app.post("/webhook/whatsapp", async (req, res) => {
-
   try {
-
     const payload = req.body;
     const entry = payload?.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
 
-    if (!value?.messages?.length)
-      return res.sendStatus(200);
+    if (!value?.messages?.length) return res.sendStatus(200);
 
-    const incomingPhone =
-      value.messages[0]?.from ||
-      value.contacts?.[0]?.wa_id;
+    const incomingPhone = value.messages[0]?.from || value.contacts?.[0]?.wa_id;
 
-    const normalizedPhone =
-      incomingPhone.replace(/\D/g, "").slice(-10);
+    const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
 
     let text =
-      value.messages[0]?.text?.body ||
-      value.messages[0]?.button?.text ||
-      "";
+      value.messages[0]?.text?.body || value.messages[0]?.button?.text || "";
 
     text = text.trim().toUpperCase();
     if (!["YES", "NO"].includes(text)) {
-    return res.sendStatus(200);
-}
+      return res.sendStatus(200);
+    }
 
     const provider = await Provider.findOne({
-  phoneNumber: normalizedPhone,
-  isActive: true
-});
+      phoneNumber: normalizedPhone,
+      isActive: true,
+    });
 
-    if (!provider)
-      return res.sendStatus(200);
+    if (!provider) return res.sendStatus(200);
 
     provider.lastInteractionAt = new Date();
     await provider.save();
 
     const jobNotification = await JobNotification.findOne({
-  providerId: provider._id,
-  status: "sent"
-}).sort({ createdAt: -1 });
+      providerId: provider._id,
+      status: "sent",
+    }).sort({ createdAt: -1 });
 
     if (!jobNotification) {
-
       await sendWhatsAppText(
         normalizedPhone,
-        "⚠️ This job is no longer available."
+        "⚠️ This job is no longer available.",
       );
 
       return res.sendStatus(200);
     }
 
     if (text === "YES") {
-
       const serviceReq = await ServiceRequest.findById(
-        jobNotification.serviceRequestId
+        jobNotification.serviceRequestId,
       );
 
       if (!serviceReq) {
-  return res.sendStatus(200);
-}
+        return res.sendStatus(200);
+      }
 
       const update = await ServiceRequest.updateOne(
         { _id: serviceReq._id, status: "pending" },
@@ -490,50 +437,45 @@ app.post("/webhook/whatsapp", async (req, res) => {
             status: "assigned",
             assignedProviderId: provider._id,
             assignedProviderName: provider.name,
-            assignedProviderPhone: provider.phoneNumber
-          }
-        }
+            assignedProviderPhone: provider.phoneNumber,
+          },
+        },
       );
 
       if (update.modifiedCount === 0) {
-
         await sendWhatsAppText(
           normalizedPhone,
-          "⚠️ This job has already been taken."
+          "⚠️ This job has already been taken.",
         );
 
         return res.sendStatus(200);
       }
 
-      
-
       const existingAcceptance = await JobAcceptance.findOne({
-  requestId: serviceReq._id
-});
+        requestId: serviceReq._id,
+      });
 
-if (!existingAcceptance) {
-
-  await JobAcceptance.create({
-    requestId: serviceReq._id,
-    providerId: provider._id,
-    providerName: provider.name,
-    providerPhone: provider.phoneNumber,
-    source: "whatsapp"
-  });
-
-}
+      if (!existingAcceptance) {
+        await JobAcceptance.create({
+          requestId: serviceReq._id,
+          providerId: provider._id,
+          providerName: provider.name,
+          providerPhone: provider.phoneNumber,
+          source: "whatsapp",
+        });
+      }
 
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "accepted" }
+        { status: "accepted" },
       );
 
       await JobNotification.updateMany(
         {
           serviceRequestId: serviceReq._id,
-          _id: { $ne: jobNotification._id }
+          _id: { $ne: jobNotification._id },
         },
-        { status: "expired" }
+        { status: "expired" },
       );
 
       await sendWhatsAppTemplate(
@@ -542,19 +484,17 @@ if (!existingAcceptance) {
         [
           serviceReq.customerName,
           serviceReq.customerPhone,
-          formatPublicLocation(serviceReq.customerAddress)
-        ]
+          formatPublicLocation(serviceReq.customerAddress),
+        ],
       );
     }
 
     if (text === "NO") {
-
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "rejected" }
+        { status: "rejected" },
       );
     }
-
   } catch (err) {
     console.error("Webhook error:", err);
   }
@@ -562,22 +502,17 @@ if (!existingAcceptance) {
   res.sendStatus(200);
 });
 
-
 // ================= ACCEPT/REJECT JOBS =================
 
 // Get all accepted jobs
 app.get("/jobs/accepted", async (req, res) => {
-
   try {
-
-    const jobs = await JobAcceptance
-      .find({})
+    const jobs = await JobAcceptance.find({})
       .populate("requestId")
       .populate("providerId", "name phoneNumber jobRole")
       .sort({ createdAt: -1 });
 
     res.json(jobs);
-
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch accepted jobs" });
   }
@@ -585,16 +520,12 @@ app.get("/jobs/accepted", async (req, res) => {
 
 // Get accepted jobs for a provider
 app.get("/provider/:id/jobs", async (req, res) => {
-
   try {
-
-    const jobs = await JobAcceptance
-      .find({ providerId: req.params.id })
+    const jobs = await JobAcceptance.find({ providerId: req.params.id })
       .populate("requestId")
       .sort({ createdAt: -1 });
 
     res.json(jobs);
-
   } catch {
     res.status(500).json({ message: "Failed to fetch provider jobs" });
   }
@@ -602,19 +533,14 @@ app.get("/provider/:id/jobs", async (req, res) => {
 
 // Get single accepted job
 app.get("/jobs/accepted/:id", async (req, res) => {
-
   try {
-
-    const job = await JobAcceptance
-      .findById(req.params.id)
+    const job = await JobAcceptance.findById(req.params.id)
       .populate("requestId")
       .populate("providerId");
 
-    if (!job)
-      return res.status(404).json({ message: "Job not found" });
+    if (!job) return res.status(404).json({ message: "Job not found" });
 
     res.json(job);
-
   } catch {
     res.status(500).json({ message: "Failed to fetch job" });
   }
@@ -622,9 +548,7 @@ app.get("/jobs/accepted/:id", async (req, res) => {
 
 // Manually assign job by admin
 app.post("/service-request/:requestId/assign", async (req, res) => {
-
   try {
-
     const { requestId } = req.params;
     const { providerId } = req.body;
 
@@ -634,7 +558,9 @@ app.post("/service-request/:requestId/assign", async (req, res) => {
       return res.status(404).json({ message: "Service request not found" });
 
     if (serviceReq.status !== "pending")
-      return res.status(400).json({ message: "Job already assigned or closed" });
+      return res
+        .status(400)
+        .json({ message: "Job already assigned or closed" });
 
     const provider = await Provider.findById(providerId);
 
@@ -649,31 +575,28 @@ app.post("/service-request/:requestId/assign", async (req, res) => {
     await serviceReq.save();
 
     const existingAcceptance = await JobAcceptance.findOne({
-  requestId: serviceReq._id
-});
+      requestId: serviceReq._id,
+    });
 
-if (!existingAcceptance) {
-
-  await JobAcceptance.create({
-    requestId: serviceReq._id,
-    providerId: provider._id,
-    providerName: provider.name,
-    providerPhone: provider.phoneNumber,
-    source: "admin"
-  });
-
-}
+    if (!existingAcceptance) {
+      await JobAcceptance.create({
+        requestId: serviceReq._id,
+        providerId: provider._id,
+        providerName: provider.name,
+        providerPhone: provider.phoneNumber,
+        source: "admin",
+      });
+    }
 
     await JobNotification.updateMany(
       { serviceRequestId: serviceReq._id },
-      { status: "expired" }
+      { status: "expired" },
     );
 
     res.json({
       message: "Job manually assigned",
-      provider: provider.name
+      provider: provider.name,
     });
-
   } catch {
     res.status(500).json({ message: "Manual assignment failed" });
   }
@@ -681,9 +604,7 @@ if (!existingAcceptance) {
 
 // Reject service request with reason
 app.post("/service-request/:id/reject", async (req, res) => {
-
   try {
-
     const { reason } = req.body;
 
     const request = await ServiceRequest.findById(req.params.id);
@@ -702,14 +623,13 @@ app.post("/service-request/:id/reject", async (req, res) => {
 
     await JobNotification.updateMany(
       { serviceRequestId: request._id },
-      { status: "expired" }
+      { status: "expired" },
     );
 
     res.json({
       message: "Request rejected",
-      reason
+      reason,
     });
-
   } catch {
     res.status(500).json({ message: "Failed to reject request" });
   }
@@ -719,13 +639,17 @@ app.post("/service-request/:id/reject", async (req, res) => {
 
 // Get admin dashboard statistics
 app.get("/dashboard/stats", async (req, res) => {
-
   try {
-
     const pending = await ServiceRequest.countDocuments({ status: "pending" });
-    const assigned = await ServiceRequest.countDocuments({ status: "assigned" });
-    const rejected = await ServiceRequest.countDocuments({ status: "rejected" });
-    const cancelled = await ServiceRequest.countDocuments({ status: "cancelled" });
+    const assigned = await ServiceRequest.countDocuments({
+      status: "assigned",
+    });
+    const rejected = await ServiceRequest.countDocuments({
+      status: "rejected",
+    });
+    const cancelled = await ServiceRequest.countDocuments({
+      status: "cancelled",
+    });
 
     const activeProviders = await Provider.countDocuments({ isActive: true });
 
@@ -734,49 +658,43 @@ app.get("/dashboard/stats", async (req, res) => {
       assigned,
       rejected,
       cancelled,
-      activeProviders
+      activeProviders,
     });
-
   } catch {
     res.status(500).json({
-      message: "Failed to fetch dashboard stats"
+      message: "Failed to fetch dashboard stats",
     });
   }
-
 });
 
 // ================= SERVICE REQUEST DETAILS =================
 
 app.get("/service-request/:id/details", async (req, res) => {
-
   try {
-
     const request = await ServiceRequest.findById(req.params.id);
 
     if (!request)
       return res.status(404).json({ message: "Service request not found" });
 
-    const acceptance = await JobAcceptance
-      .findOne({ requestId: request._id })
-      .populate("providerId", "name phoneNumber jobRole");
+    const acceptance = await JobAcceptance.findOne({
+      requestId: request._id,
+    }).populate("providerId", "name phoneNumber jobRole");
 
-    const notifications = await JobNotification
-      .find({ serviceRequestId: request._id })
+    const notifications = await JobNotification.find({
+      serviceRequestId: request._id,
+    })
       .populate("providerId", "name phoneNumber jobRole")
       .sort({ createdAt: 1 });
 
     res.json({
       request,
       acceptance,
-      notifications
+      notifications,
     });
-
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch request details" });
   }
-
 });
-
 
 // ================= SYSTEM =================
 
@@ -785,20 +703,15 @@ app.get("/health", (req, res) => {
   res.send("OK");
 });
 
-
 // ================= SERVER =================
 
 const PORT = process.env.PORT || 7777;
 
 connectDB()
   .then(() => {
-
     console.log("MongoDB connected");
 
-    app.listen(PORT, () =>
-      console.log(`Server running on port ${PORT}`)
-    );
-
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((err) => {
     console.error("DB connection failed", err);
