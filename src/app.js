@@ -291,6 +291,30 @@ app.delete("/service/:id", async (req, res) => {
   }
 });
 
+
+// Add subservice
+app.patch("/service/:serviceId/subservice", async (req, res) => {
+  try {
+
+    const service = await ServiceModel.findById(req.params.serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    service.services.push(req.body);
+
+    await service.save();
+
+    res.json({
+      message: "Subservice added",
+      subService: req.body
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to add subservice" });
+  }
+});
+
 // Update subservice
 app.put("/service/:serviceId/subservice/:subServiceName", async (req, res) => {
   try {
@@ -344,6 +368,38 @@ app.delete("/service/:serviceId/subservice/:subServiceName", async (req, res) =>
 
   } catch {
     res.status(500).json({ message: "Failed to delete subservice" });
+  }
+});
+
+// Add detailed subservice
+app.patch("/service/:serviceId/subservice/:subServiceName/detail", async (req, res) => {
+  try {
+
+    const { serviceId, subServiceName } = req.params;
+
+    const service = await ServiceModel.findById(serviceId);
+
+    if (!service)
+      return res.status(404).json({ message: "Service not found" });
+
+    const subService = service.services.find(
+      s => s.name.toLowerCase() === subServiceName.toLowerCase()
+    );
+
+    if (!subService)
+      return res.status(404).json({ message: "Subservice not found" });
+
+    subService.detailedSubService.push(req.body);
+
+    await service.save();
+
+    res.json({
+      message: "Detailed subservice added",
+      detail: req.body
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to add detailed subservice" });
   }
 });
 
