@@ -5,12 +5,14 @@ const JobAcceptanceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "ServiceRequest",
+    index: true
   },
 
   providerId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: "Provider"
+    ref: "Provider",
+    index: true
   },
 
   providerName: {
@@ -31,6 +33,9 @@ const JobAcceptanceSchema = new mongoose.Schema({
   timestamps: true
 });
 
+
+// compound index useful for provider job history
+JobAcceptanceSchema.index({ providerId: 1, createdAt: -1 });
 
 const JobAcceptance =
   mongoose.models.JobAcceptance ||

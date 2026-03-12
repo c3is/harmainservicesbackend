@@ -5,7 +5,8 @@ const ServiceRequestSchema = new mongoose.Schema({
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: "serviceModel"
+    ref: "serviceModel",
+    index: true
   },
 
   serviceName: {
@@ -36,7 +37,8 @@ const ServiceRequestSchema = new mongoose.Schema({
 
   customerPhone: {
     type: String,
-    required: true
+    required: true,
+    index: true
   },
 
   customerAddress: {
@@ -49,12 +51,41 @@ const ServiceRequestSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ["pending", "assigned", "cancelled"],
-    default: "pending"
-  }
+    enum: ["pending", "assigned", "cancelled", "rejected"],
+    default: "pending",
+    index: true
+  },
+
+  rejectionReason: {
+    type: String
+  },
+
+  rejectedBy: {
+    type: String,
+    enum: ["admin", "system"]
+  },
+
+  assignedProviderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Provider",
+    index: true
+  },
+
+  assignedProviderName: String,
+
+  assignedProviderPhone: String
 
 }, { timestamps: true });
 
-const ServiceRequest = mongoose.model("ServiceRequest", ServiceRequestSchema);
+
+// dashboard + filtering optimization
+ServiceRequestSchema.index({ status: 1, createdAt: -1 });
+
+// provider job lookup optimization
+ServiceRequestSchema.index({ assignedProviderId: 1, createdAt: -1 });
+
+const ServiceRequest =
+  mongoose.models.ServiceRequest ||
+  mongoose.model("ServiceRequest", ServiceRequestSchema);
 
 module.exports = { ServiceRequest };

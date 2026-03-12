@@ -6,28 +6,38 @@ const providerSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
     address: {
       type: String,
     },
+
     phoneNumber: {
       type: String,
       required: true,
-      unique: true,
+      unique: true, // automatically indexed
       default: "7718908727"
     },
-    jobRole: [String],
+
+    jobRole: {
+      type: [String],
+      index: true
+    },
+
     isActive: {
       type: Boolean,
       default: true,
+      index: true
     },
+
     isAvailable: {
       type: Boolean,
-      default: true,
+      default: true
     },
+
     lastInteractionAt: {
-  type: Date,
-  default: null
-}
+      type: Date,
+      default: null
+    }
 
   },
   {
@@ -35,5 +45,12 @@ const providerSchema = new mongoose.Schema(
   }
 );
 
-const Provider = mongoose.model("Provider", providerSchema);
+
+// Faster provider search for job dispatch
+providerSchema.index({ jobRole: 1, isActive: 1 });
+
+const Provider =
+  mongoose.models.Provider ||
+  mongoose.model("Provider", providerSchema);
+
 module.exports = Provider;
