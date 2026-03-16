@@ -26,7 +26,7 @@ const JobAssignmentHistorySchema = new mongoose.Schema(
         "rejected",
         "cancelled_by_provider",
         "reassigned_by_admin",
-        "assigned_by_admin"
+        "assigned_by_admin","cancelled_by_admin"
       ],
       required: true
     },

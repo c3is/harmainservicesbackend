@@ -785,6 +785,64 @@ app.get("/jobs/accepted/:id", async (req, res) => {
   }
 });
 
+// cancel job
+app.patch("/service-request/:requestId/cancel", async (req, res) => {
+  try {
+
+    const { requestId } = req.params;
+
+    const request = await ServiceRequest.findById(requestId);
+
+    if (!request) {
+      return res.status(404).json({ message: "Service request not found" });
+    }
+
+    if (request.status === "cancelled") {
+      return res.status(400).json({ message: "Job already cancelled" });
+    }
+
+    // update request status
+    request.status = "cancelled";
+    await request.save();
+
+    // if job was already assigned, cancel the acceptance
+    await JobAcceptance.updateMany(
+      { requestId: request._id, status: "active" },
+      { $set: { status: "cancelled" } }
+    );
+
+    // expire notifications if any were sent
+    await JobNotification.updateMany(
+      { serviceRequestId: request._id },
+      { status: "expired" }
+    );
+
+    // add history
+    await JobAssignmentHistory.create({
+      requestId: request._id,
+      providerId: request.assignedProviderId || null,
+      providerName: request.assignedProviderName || "N/A",
+      action: "cancelled_by_admin"
+    });
+
+    // optional: notify provider if job was assigned
+    if (request.assignedProviderPhone) {
+      await sendWhatsAppText(
+        request.assignedProviderPhone,
+        "⚠️ The assigned job has been cancelled by admin."
+      );
+    }
+
+    res.json({
+      message: "Job cancelled successfully"
+    });
+
+  } catch (err) {
+    console.error("Cancel job error:", err);
+    res.status(500).json({ message: "Failed to cancel job" });
+  }
+});
+
 // Manually assign job by admin
 app.post("/service-request/:requestId/assign", async (req, res) => {
   try {
