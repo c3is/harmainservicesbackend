@@ -27,7 +27,12 @@ const JobAcceptanceSchema = new mongoose.Schema({
   type: String,
   enum: ["whatsapp", "admin", "simulation", "admin-reassign"],
   default: "whatsapp"
-}
+},
+status: {
+    type: String,
+    enum: ["active", "reassigned", "cancelled"],
+    default: "active"
+  }
 
 }, {
   timestamps: true
