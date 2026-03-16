@@ -840,6 +840,34 @@ app.post("/service-request/:id/reject", async (req, res) => {
   }
 });
 
+// Manually un-assign job by admin
+app.patch("/service-request/:id/unassign", async (req, res) => {
+  try {
+
+    const request = await ServiceRequest.findById(req.params.id);
+
+    if (!request)
+      return res.status(404).json({ message: "Service request not found" });
+
+    if (request.status !== "assigned")
+      return res.status(400).json({ message: "Job is not assigned" });
+
+    request.status = "pending";
+    request.assignedProviderId = null;
+    request.assignedProviderName = null;
+    request.assignedProviderPhone = null;
+
+    await request.save();
+
+    res.json({
+      message: "Provider removed, job reopened"
+    });
+
+  } catch {
+    res.status(500).json({ message: "Failed to unassign provider" });
+  }
+});
+
 // ================= DASHBOARD =================
 
 // Get admin dashboard statistics
@@ -916,6 +944,8 @@ app.get("/service-request/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch service request" });
   }
 });
+
+
 
 // ================= SYSTEM =================
 
