@@ -841,30 +841,45 @@ app.post("/service-request/:id/reject", async (req, res) => {
 });
 
 // Manually un-assign job by admin
-app.patch("/service-request/:id/unassign", async (req, res) => {
+app.patch("/service-request/:requestId/reassign", async (req, res) => {
   try {
 
-    const request = await ServiceRequest.findById(req.params.id);
+    const { providerId } = req.body;
+    const { requestId } = req.params;
+
+    const request = await ServiceRequest.findById(requestId);
 
     if (!request)
       return res.status(404).json({ message: "Service request not found" });
 
-    if (request.status !== "assigned")
-      return res.status(400).json({ message: "Job is not assigned" });
+    const provider = await Provider.findById(providerId);
 
-    request.status = "pending";
-    request.assignedProviderId = null;
-    request.assignedProviderName = null;
-    request.assignedProviderPhone = null;
+    if (!provider)
+      return res.status(404).json({ message: "Provider not found" });
+
+    request.assignedProviderId = provider._id;
+    request.assignedProviderName = provider.name;
+    request.assignedProviderPhone = provider.phoneNumber;
+
+    request.status = "assigned";
 
     await request.save();
 
+    await JobAcceptance.create({
+      requestId: request._id,
+      providerId: provider._id,
+      providerName: provider.name,
+      providerPhone: provider.phoneNumber,
+      source: "admin-reassign"
+    });
+
     res.json({
-      message: "Provider removed, job reopened"
+      message: "Job reassigned successfully",
+      provider: provider.name
     });
 
   } catch {
-    res.status(500).json({ message: "Failed to unassign provider" });
+    res.status(500).json({ message: "Failed to reassign job" });
   }
 });
 
