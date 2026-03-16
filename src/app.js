@@ -739,9 +739,15 @@ app.get("/jobs/accepted", async (req, res) => {
 app.get("/provider/:id/jobs", async (req, res) => {
   try {
 
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Provider id required" });
+    }
+
     const jobs = await JobAcceptance.find({
-      providerId: req.params.id,
-      status: "active"   // only active jobs
+      providerId: id,
+      status: "active"   // only return currently active jobs
     })
       .populate("requestId")
       .sort({ createdAt: -1 });
@@ -885,21 +891,21 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
       });
     }
 
-    // expire previous acceptances
+    // expire previous active acceptances
     await JobAcceptance.updateMany(
       { requestId: request._id, status: "active" },
       { $set: { status: "reassigned" } }
     );
 
-    // update request provider
+    // update service request provider
     request.assignedProviderId = provider._id;
     request.assignedProviderName = provider.name;
     request.assignedProviderPhone = provider.phoneNumber;
 
     await request.save();
 
-    // create new acceptance
-    await JobAcceptance.create({
+    // create new acceptance record
+    const newJob = await JobAcceptance.create({
       requestId: request._id,
       providerId: provider._id,
       providerName: provider.name,
@@ -908,7 +914,7 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
       status: "active"
     });
 
-    // add history
+    // save assignment history
     await JobAssignmentHistory.create({
       requestId: request._id,
       providerId: provider._id,
@@ -918,7 +924,8 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
 
     res.json({
       message: "Job reassigned successfully",
-      provider: provider.name
+      provider: provider.name,
+      jobAcceptanceId: newJob._id
     });
 
   } catch (err) {
