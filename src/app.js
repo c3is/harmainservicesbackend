@@ -724,13 +724,23 @@ app.post("/webhook/whatsapp", async (req, res) => {
 // Get all accepted jobs
 app.get("/jobs/accepted", async (req, res) => {
   try {
-    const jobs = await JobAcceptance.find({})
+
+    const filter = {};
+
+    // if ?status=active is passed
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    const jobs = await JobAcceptance.find(filter)
       .populate("requestId")
       .populate("providerId", "name phoneNumber jobRole")
       .sort({ createdAt: -1 });
 
     res.json(jobs);
+
   } catch (err) {
+    console.error("Fetch accepted jobs error:", err);
     res.status(500).json({ message: "Failed to fetch accepted jobs" });
   }
 });
