@@ -24,10 +24,10 @@ const JobAcceptanceSchema = new mongoose.Schema({
   },
 
   source: {
-    type: String,
-    enum: ["whatsapp", "admin", "simulation"],
-    default: "whatsapp"
-  }
+  type: String,
+  enum: ["whatsapp", "admin", "simulation", "admin-reassign"],
+  default: "whatsapp"
+}
 
 }, {
   timestamps: true

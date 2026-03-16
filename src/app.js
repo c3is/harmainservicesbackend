@@ -11,6 +11,7 @@ const Provider = require("./models/Provider");
 const { ServiceRequest } = require("./models/ServiceRequest");
 const { JobNotification } = require("./models/JobNotification");
 const { JobAcceptance } = require("./models/JobAcceptance");
+const JobAssignmentHistory = require("./models/JobAssignmentHistory");
 
 const app = express();
 
@@ -859,24 +860,55 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
     const { providerId } = req.body;
     const { requestId } = req.params;
 
+    if (!providerId) {
+      return res.status(400).json({ message: "Provider ID is required" });
+    }
+
+    // find request
     const request = await ServiceRequest.findById(requestId);
 
-    if (!request)
+    if (!request) {
       return res.status(404).json({ message: "Service request not found" });
+    }
 
+    // optional: only allow reassignment if job already assigned
+    if (request.status !== "assigned") {
+      return res.status(400).json({
+        message: "Only assigned jobs can be reassigned"
+      });
+    }
+
+    // find provider
     const provider = await Provider.findById(providerId);
 
-    if (!provider)
+    if (!provider) {
       return res.status(404).json({ message: "Provider not found" });
+    }
 
+    // prevent assigning to same provider
+    if (
+      request.assignedProviderId &&
+      request.assignedProviderId.toString() === providerId
+    ) {
+      return res.status(400).json({
+        message: "Job already assigned to this provider"
+      });
+    }
+
+    // update request with new provider
     request.assignedProviderId = provider._id;
     request.assignedProviderName = provider.name;
     request.assignedProviderPhone = provider.phoneNumber;
 
-    request.status = "assigned";
-
     await request.save();
 
+    // mark previous acceptances as reassigned (optional but recommended)
+    await JobAcceptance.updateMany(
+      { requestId: request._id },
+      { $set: { reassigned: true } }
+    );
+
+    // create new acceptance record
     await JobAcceptance.create({
       requestId: request._id,
       providerId: provider._id,
@@ -885,6 +917,7 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
       source: "admin-reassign"
     });
 
+    // create assignment history
     await JobAssignmentHistory.create({
       requestId: request._id,
       providerId: provider._id,
@@ -897,8 +930,12 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
       provider: provider.name
     });
 
-  } catch {
-    res.status(500).json({ message: "Failed to reassign job" });
+  } catch (err) {
+    console.error("Reassign error:", err);
+
+    res.status(500).json({
+      message: "Failed to reassign job"
+    });
   }
 });
 
