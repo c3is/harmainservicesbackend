@@ -590,21 +590,25 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     if (!value?.messages?.length) return res.sendStatus(200);
 
-    const incomingPhone = value.messages[0]?.from || value.contacts?.[0]?.wa_id;
+    const incomingPhone =
+      value.messages[0]?.from || value.contacts?.[0]?.wa_id;
 
     const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
 
     let text =
-      value.messages[0]?.text?.body || value.messages[0]?.button?.text || "";
+      value.messages[0]?.text?.body ||
+      value.messages[0]?.button?.text ||
+      "";
 
     text = text.trim().toUpperCase();
+
     if (!["YES", "NO"].includes(text)) {
       return res.sendStatus(200);
     }
 
     const provider = await Provider.findOne({
       phoneNumber: normalizedPhone,
-      isActive: true,
+      isActive: true
     });
 
     if (!provider) return res.sendStatus(200);
@@ -614,26 +618,24 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     const jobNotification = await JobNotification.findOne({
       providerId: provider._id,
-      status: "sent",
+      status: "sent"
     }).sort({ createdAt: -1 });
 
     if (!jobNotification) {
       await sendWhatsAppText(
         normalizedPhone,
-        "⚠️ This job is no longer available.",
+        "⚠️ This job is no longer available."
       );
-
       return res.sendStatus(200);
     }
 
-    if (text === "YES") {
-      const serviceReq = await ServiceRequest.findById(
-        jobNotification.serviceRequestId,
-      );
+    const serviceReq = await ServiceRequest.findById(
+      jobNotification.serviceRequestId
+    );
 
-      if (!serviceReq) {
-        return res.sendStatus(200);
-      }
+    if (!serviceReq) return res.sendStatus(200);
+
+    if (text === "YES") {
 
       const update = await ServiceRequest.updateOne(
         { _id: serviceReq._id, status: "pending" },
@@ -642,45 +644,45 @@ app.post("/webhook/whatsapp", async (req, res) => {
             status: "assigned",
             assignedProviderId: provider._id,
             assignedProviderName: provider.name,
-            assignedProviderPhone: provider.phoneNumber,
-          },
-        },
+            assignedProviderPhone: provider.phoneNumber
+          }
+        }
       );
 
       if (update.modifiedCount === 0) {
         await sendWhatsAppText(
           normalizedPhone,
-          "⚠️ This job has already been taken.",
+          "⚠️ This job has already been taken."
         );
-
         return res.sendStatus(200);
       }
 
-      const existingAcceptance = await JobAcceptance.findOne({
+      await JobAcceptance.create({
         requestId: serviceReq._id,
+        providerId: provider._id,
+        providerName: provider.name,
+        providerPhone: provider.phoneNumber,
+        source: "whatsapp"
       });
 
-      if (!existingAcceptance) {
-        await JobAcceptance.create({
-          requestId: serviceReq._id,
-          providerId: provider._id,
-          providerName: provider.name,
-          providerPhone: provider.phoneNumber,
-          source: "whatsapp",
-        });
-      }
+      await JobAssignmentHistory.create({
+        requestId: serviceReq._id,
+        providerId: provider._id,
+        providerName: provider.name,
+        action: "accepted"
+      });
 
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "accepted" },
+        { status: "accepted" }
       );
 
       await JobNotification.updateMany(
         {
           serviceRequestId: serviceReq._id,
-          _id: { $ne: jobNotification._id },
+          _id: { $ne: jobNotification._id }
         },
-        { status: "expired" },
+        { status: "expired" }
       );
 
       await sendWhatsAppTemplate(
@@ -689,17 +691,26 @@ app.post("/webhook/whatsapp", async (req, res) => {
         [
           serviceReq.customerName,
           serviceReq.customerPhone,
-          formatPublicLocation(serviceReq.customerAddress),
-        ],
+          formatPublicLocation(serviceReq.customerAddress)
+        ]
       );
     }
 
     if (text === "NO") {
+
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "rejected" },
+        { status: "rejected" }
       );
+
+      await JobAssignmentHistory.create({
+        requestId: serviceReq._id,
+        providerId: provider._id,
+        providerName: provider.name,
+        action: "rejected"
+      });
     }
+
   } catch (err) {
     console.error("Webhook error:", err);
   }
@@ -754,6 +765,7 @@ app.get("/jobs/accepted/:id", async (req, res) => {
 // Manually assign job by admin
 app.post("/service-request/:requestId/assign", async (req, res) => {
   try {
+
     const { requestId } = req.params;
     const { providerId } = req.body;
 
@@ -763,9 +775,7 @@ app.post("/service-request/:requestId/assign", async (req, res) => {
       return res.status(404).json({ message: "Service request not found" });
 
     if (serviceReq.status !== "pending")
-      return res
-        .status(400)
-        .json({ message: "Job already assigned or closed" });
+      return res.status(400).json({ message: "Job already assigned or closed" });
 
     const provider = await Provider.findById(providerId);
 
@@ -779,29 +789,31 @@ app.post("/service-request/:requestId/assign", async (req, res) => {
 
     await serviceReq.save();
 
-    const existingAcceptance = await JobAcceptance.findOne({
+    await JobAcceptance.create({
       requestId: serviceReq._id,
+      providerId: provider._id,
+      providerName: provider.name,
+      providerPhone: provider.phoneNumber,
+      source: "admin"
     });
 
-    if (!existingAcceptance) {
-      await JobAcceptance.create({
-        requestId: serviceReq._id,
-        providerId: provider._id,
-        providerName: provider.name,
-        providerPhone: provider.phoneNumber,
-        source: "admin",
-      });
-    }
+    await JobAssignmentHistory.create({
+      requestId: serviceReq._id,
+      providerId: provider._id,
+      providerName: provider.name,
+      action: "assigned_by_admin"
+    });
 
     await JobNotification.updateMany(
       { serviceRequestId: serviceReq._id },
-      { status: "expired" },
+      { status: "expired" }
     );
 
     res.json({
       message: "Job manually assigned",
-      provider: provider.name,
+      provider: provider.name
     });
+
   } catch {
     res.status(500).json({ message: "Manual assignment failed" });
   }
@@ -873,6 +885,13 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
       source: "admin-reassign"
     });
 
+    await JobAssignmentHistory.create({
+      requestId: request._id,
+      providerId: provider._id,
+      providerName: provider.name,
+      action: "reassigned_by_admin"
+    });
+
     res.json({
       message: "Job reassigned successfully",
       provider: provider.name
@@ -880,6 +899,22 @@ app.patch("/service-request/:requestId/reassign", async (req, res) => {
 
   } catch {
     res.status(500).json({ message: "Failed to reassign job" });
+  }
+});
+
+// View Job Assignment History
+app.get("/service-request/:id/history", async (req, res) => {
+  try {
+
+    const history = await JobAssignmentHistory
+      .find({ requestId: req.params.id })
+      .populate("providerId", "name phoneNumber jobRole")
+      .sort({ createdAt: 1 });
+
+    res.json(history);
+
+  } catch {
+    res.status(500).json({ message: "Failed to fetch job history" });
   }
 });
 
