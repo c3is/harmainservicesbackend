@@ -1050,6 +1050,70 @@ app.get("/dashboard/stats", async (req, res) => {
   }
 });
 
+app.get("/dashboard", async (req, res) => {
+  try {
+
+    const [
+      pending,
+      assigned,
+      rejected,
+      cancelled,
+      activeProviders,
+      availableProviders,
+      recentRequests,
+      recentAcceptedJobs
+    ] = await Promise.all([
+
+      ServiceRequest.countDocuments({ status: "pending" }),
+
+      ServiceRequest.countDocuments({ status: "assigned" }),
+
+      ServiceRequest.countDocuments({ status: "rejected" }),
+
+      ServiceRequest.countDocuments({ status: "cancelled" }),
+
+      Provider.countDocuments({ isActive: true }),
+
+      Provider.countDocuments({ isAvailable: true }),
+
+      ServiceRequest.find({})
+        .sort({ createdAt: -1 })
+        .limit(10),
+
+      JobAcceptance.find({ status: "active" })
+        .populate("providerId", "name phoneNumber")
+        .populate("requestId", "customerName serviceName")
+        .sort({ createdAt: -1 })
+        .limit(10)
+
+    ]);
+
+    res.json({
+      stats: {
+        pending,
+        assigned,
+        rejected,
+        cancelled
+      },
+
+      providers: {
+        active: activeProviders,
+        available: availableProviders
+      },
+
+      recentRequests,
+      recentAcceptedJobs
+
+    });
+
+  } catch (err) {
+    console.error("Dashboard error:", err);
+    res.status(500).json({
+      message: "Failed to load dashboard"
+    });
+  }
+});
+
 // ================= SERVICE REQUEST DETAILS =================
 
 app.get("/service-request/:id/details", async (req, res) => {
