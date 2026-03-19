@@ -12,6 +12,7 @@ const { ServiceRequest } = require("./models/ServiceRequest");
 const { JobNotification } = require("./models/JobNotification");
 const { JobAcceptance } = require("./models/JobAcceptance");
 const JobAssignmentHistory = require("./models/JobAssignmentHistory");
+const { sendEmail } = require("./utils/sendEmail");
 
 const app = express();
 
@@ -79,6 +80,55 @@ app.post("/provider", async (req, res) => {
     res.json("Provider Saved");
   } catch {
     res.status(500).send("Something went wrong");
+  }
+});
+
+// create bulk provider 
+
+app.post("/providers/bulk", async (req, res) => {
+  try {
+    const { jobRole, providers } = req.body;
+
+    // 🔹 Basic validation
+    if (!jobRole || !Array.isArray(providers)) {
+      return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    const role = jobRole.toLowerCase().trim();
+
+    // 🔹 Format + clean data
+    const formattedProviders = providers
+      .map((p) => ({
+        name: p.name?.trim(),
+        phoneNumber: String(p.phoneNumber || "").trim(),
+        address: p.address?.trim() || "",
+        jobRole: [role],
+        isActive: true,
+        isAvailable: true,
+      }))
+      .filter((p) => p.name && p.phoneNumber); // remove bad rows
+
+    if (formattedProviders.length === 0) {
+      return res.status(400).json({ message: "No valid providers to insert" });
+    }
+
+    // 🔹 Insert (skip duplicates)
+    const result = await Provider.insertMany(formattedProviders, {
+      ordered: false,
+    });
+
+    res.status(201).json({
+      message: "Bulk insert successful",
+      insertedCount: result.length,
+    });
+
+  } catch (err) {
+    console.log("Bulk insert error:", err.message);
+
+    res.status(500).json({
+      message: "Bulk insert failed",
+      error: err.message,
+    });
   }
 });
 
@@ -487,7 +537,7 @@ app.post("/service-request", async (req, res) => {
       customer,
     } = req.body;
 
-    if (!customer?.name || !customer?.phone)
+    if (!customer?.name || !customer?.phone || !customer?.email)
       return res.status(400).send("Customer info missing");
 
     const service = await ServiceModel.findOne({ slug: serviceSlug });
@@ -509,6 +559,39 @@ app.post("/service-request", async (req, res) => {
 
     await serviceReq.save();
 
+    // ✅ Use DB _id as Request ID
+    const requestId = serviceReq._id.toString();
+
+    // ✅ Send email to customer
+    try {
+      await sendEmail(
+        customer.email,
+        "Your Service Request is Received",
+        `
+          <h2>Hi ${customer.name},</h2>
+
+          <p>Your request has been successfully received.</p>
+
+          <p><b>Request ID:</b> ${requestId}</p>
+          <p><b>Service:</b> ${service.title}</p>
+          <p><b>Location:</b> ${locationText}</p>
+
+          <p>We are assigning a provider shortly.</p>
+
+          <p><b>Estimated response time:</b> 5–10 minutes</p>
+
+          <br/>
+          <p>If you need any update, just share this Request ID with us.</p>
+
+          <br/>
+          <p>Thank you,<br/>Harmain Team</p>
+        `
+      );
+    } catch (err) {
+      console.error("Email failed:", err.message);
+    }
+
+    // 🔽 Existing provider notification logic (unchanged)
     const providers = await Provider.find({
       jobRole: serviceSlug.toLowerCase(),
       isActive: true,
@@ -538,19 +621,19 @@ You have received a new job request.
 
 Location: ${locationText}
 
-Reply YES to accept or NO to decline.`,
+Reply YES to accept or NO to decline.`
           );
         } else {
           await sendWhatsAppTemplate(
             provider.phoneNumber,
             process.env.GUPSHUP_JOB_BUTTON_TEMPLATE_ID,
-            [provider.name, locationText, new Date().toLocaleString("en-IN")],
+            [provider.name, locationText, new Date().toLocaleString("en-IN")]
           );
         }
 
         await JobNotification.updateOne(
           { _id: jobNotification._id },
-          { status: "sent" },
+          { status: "sent" }
         );
       } catch (err) {
         console.error("Provider failed:", provider.phoneNumber);
@@ -558,7 +641,8 @@ Reply YES to accept or NO to decline.`,
     }
 
     res.json("Service request created");
-  } catch {
+  } catch (error) {
+    console.error(error);
     res.status(500).send("Failed to create request");
   }
 });
@@ -1159,6 +1243,91 @@ app.get("/service-request/:id", async (req, res) => {
   }
 });
 
+app.patch("/service-request/:id/status", async (req, res) => {
+  try {
+    const { status: newStatus } = req.body;
+
+    const request = await ServiceRequest.findById(req.params.id);
+
+    if (!request) {
+      return res.status(404).json({ message: "Service request not found" });
+    }
+
+    const currentStatus = request.status;
+
+    // ✅ Validate transition
+    if (!allowedTransitions[currentStatus].includes(newStatus)) {
+      return res.status(400).json({
+        message: `Invalid status transition from ${currentStatus} to ${newStatus}`
+      });
+    }
+
+    // ================= BUSINESS LOGIC =================
+
+    // 🔴 If cancelling
+    if (newStatus === "cancelled") {
+
+      await JobAcceptance.updateMany(
+        { requestId: request._id, status: "active" },
+        { $set: { status: "cancelled" } }
+      );
+
+      await JobNotification.updateMany(
+        { serviceRequestId: request._id },
+        { status: "expired" }
+      );
+
+      if (request.assignedProviderPhone) {
+        await sendWhatsAppText(
+          request.assignedProviderPhone,
+          "⚠️ The assigned job has been cancelled."
+        );
+      }
+    }
+
+    // 🟢 If completed
+    if (newStatus === "completed") {
+
+      await JobAcceptance.updateMany(
+        { requestId: request._id, status: "active" },
+        { $set: { status: "completed" } }
+      );
+
+      // (Optional) notify customer/provider
+    }
+
+    // 🟡 If assigned manually (optional support)
+    if (newStatus === "assigned" && !request.assignedProviderId) {
+      return res.status(400).json({
+        message: "Cannot mark assigned without provider"
+      });
+    }
+
+    // ================= UPDATE =================
+
+    request.status = newStatus;
+    await request.save();
+
+    // ================= HISTORY =================
+
+    await JobAssignmentHistory.create({
+      requestId: request._id,
+      providerId: request.assignedProviderId || null,
+      providerName: request.assignedProviderName || "N/A",
+      action: `status_changed_to_${newStatus}`
+    });
+
+    res.json({
+      message: "Status updated successfully",
+      from: currentStatus,
+      to: newStatus
+    });
+
+  } catch (err) {
+    console.error("Status update error:", err);
+    res.status(500).json({ message: "Failed to update status" });
+  }
+});
 
 
 // ================= SYSTEM =================

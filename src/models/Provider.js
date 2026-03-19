@@ -15,7 +15,7 @@ const providerSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true, // automatically indexed
-      default: "7718908727"
+      // default: "7718908727"  
     },
 
     jobRole: {

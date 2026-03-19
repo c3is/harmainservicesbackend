@@ -51,6 +51,10 @@ const subServiceSchema = new mongoose.Schema(
     },
     details: {
       type: String
+    },
+    isVistingCharge:{
+      type:Boolean,
+      default:false
     }
   },
   { _id: false }
