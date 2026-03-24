@@ -70,6 +70,9 @@ const ServiceRequestSchema = new mongoose.Schema({
     ref: "Provider",
     index: true
   },
+  email:{
+    type:String
+  },
 
   assignedProviderName: String,
 

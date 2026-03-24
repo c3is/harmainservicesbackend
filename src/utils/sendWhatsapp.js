@@ -3,28 +3,39 @@ const axios = require("axios");
 function formatDestination(phone) {
   if (!phone) throw new Error("Destination phone missing");
 
-  phone = phone.replace(/\D/g, "").slice(-10);
+  const cleaned = String(phone).replace(/\D/g, "").slice(-10);
 
-  if (phone.length !== 10) {
+  if (cleaned.length !== 10) {
     throw new Error("Invalid phone number format");
   }
 
-  return "91" + phone;
+  return "91" + cleaned;
 }
 
 async function sendWhatsAppTemplate(destination, templateId, params) {
   try {
+    if (!templateId) {
+      throw new Error("Template ID missing");
+    }
 
     if (!Array.isArray(params)) {
       throw new Error("Template params must be array");
     }
 
+    const safeParams = params.map((p) =>
+      p !== undefined && p !== null && String(p).trim() !== ""
+        ? String(p)
+        : "N/A"
+    );
+
     const formattedDestination = formatDestination(destination);
 
-    console.log("📤 Sending WhatsApp template...");
-    console.log("➡️ Destination:", formattedDestination);
-    console.log("➡️ Template ID:", templateId);
-    console.log("➡️ Params:", params);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("📤 WhatsApp Template Send");
+      console.log("➡️ To:", formattedDestination);
+      console.log("➡️ Template:", templateId);
+      console.log("➡️ Params:", safeParams);
+    }
 
     const response = await axios.post(
       "https://api.gupshup.io/wa/api/v1/template/msg",
@@ -35,32 +46,32 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
         "src.name": process.env.GUPSHUP_APP_NAME,
         template: JSON.stringify({
           id: templateId,
-          params
-        })
+          params: safeParams,
+        }),
       }),
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          apikey: process.env.GUPSHUP_API_KEY
-        }
+          apikey: process.env.GUPSHUP_API_KEY,
+        },
+        timeout: 10000, // ⏱ prevents hanging
       }
     );
 
-    console.log("✅ Gupshup response:", response.data);
-
-    return response.data;
-
+    return {
+      success: true,
+      data: response.data,
+    };
   } catch (error) {
+    console.error("❌ WhatsApp Template Send Error");
 
-    console.error("❌ Template send error:");
+    const errMsg = error?.response?.data || error.message;
+    console.error("📌 Error:", errMsg);
 
-    if (error?.response?.data) {
-      console.error("📌 Gupshup Error:", error.response.data);
-    } else {
-      console.error(error.message);
-    }
-
-    return null;
+    return {
+      success: false,
+      error: errMsg,
+    };
   }
 }
 
