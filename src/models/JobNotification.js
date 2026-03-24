@@ -5,22 +5,19 @@ const JobNotificationSchema = new mongoose.Schema(
     serviceRequestId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "ServiceRequest",
-      index: true
+      ref: "ServiceRequest"
     },
 
     providerId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "Provider",
-      index: true
+      ref: "Provider"
     },
 
     status: {
       type: String,
       enum: ["created", "sent", "accepted", "rejected", "expired"],
-      default: "created",
-      index: true
+      default: "created"
     }
   },
   {
@@ -28,21 +25,17 @@ const JobNotificationSchema = new mongoose.Schema(
   }
 );
 
-//
-// Indexes for fast job dispatch & webhook lookups
-//
+// ================= INDEXES =================
 
-// webhook lookup
+// webhook lookup (VERY IMPORTANT)
 JobNotificationSchema.index({ providerId: 1, status: 1, createdAt: -1 });
 
 // expire notifications for request
 JobNotificationSchema.index({ serviceRequestId: 1 });
 
-// provider + request combination
+// provider + request combination (prevents duplicates later if needed)
 JobNotificationSchema.index({ serviceRequestId: 1, providerId: 1 });
 
-
-// Safe model compilation
 const JobNotification =
   mongoose.models.JobNotification ||
   mongoose.model("JobNotification", JobNotificationSchema);
