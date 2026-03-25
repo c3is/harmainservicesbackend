@@ -1241,49 +1241,6 @@ app.get("/service-request/:id/history", async (req, res) => {
 // ================= DASHBOARD =================
 
 // Get admin dashboard statistics
-app.get("/dashboard/stats", async (req, res) => {
-  try {
-    const pending = await ServiceRequest.countDocuments({ status: "pending" });
-
-    const assigned = await ServiceRequest.countDocuments({
-      status: "assigned",
-    });
-
-    const rejected = await ServiceRequest.countDocuments({
-      status: "rejected",
-    });
-
-    const cancelled = await ServiceRequest.countDocuments({
-      status: "cancelled",
-    });
-
-    const activeProviders = await Provider.countDocuments({
-      isActive: true,
-    });
-
-    // 🔥 NEW (important)
-    const failedNotifications = await ServiceRequest.countDocuments({
-      notificationStatus: "failed",
-    });
-
-    res.json({
-      pending,
-      assigned,
-      rejected,
-      cancelled,
-      activeProviders,
-      failedNotifications, // ✅ added
-    });
-
-  } catch (err) {
-    console.error("Dashboard stats error:", err);
-
-    res.status(500).json({
-      message: "Failed to fetch dashboard stats",
-    });
-  }
-});
-
 app.get("/dashboard", async (req, res) => {
   try {
     const [
@@ -1295,6 +1252,7 @@ app.get("/dashboard", async (req, res) => {
       availableProviders,
       recentRequests,
       recentAcceptedJobs,
+      failedNotifications, // ✅ NEW
     ] = await Promise.all([
       ServiceRequest.countDocuments({ status: "pending" }),
 
@@ -1315,6 +1273,9 @@ app.get("/dashboard", async (req, res) => {
         .populate("requestId", "customerName serviceName")
         .sort({ createdAt: -1 })
         .limit(10),
+
+      // ✅ ADD THIS
+      ServiceRequest.countDocuments({ notificationStatus: "failed" }),
     ]);
 
     res.json({
@@ -1323,6 +1284,7 @@ app.get("/dashboard", async (req, res) => {
         assigned,
         rejected,
         cancelled,
+        failedNotifications, // ✅ NEW (safe add)
       },
 
       providers: {
