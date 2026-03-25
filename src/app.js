@@ -527,10 +527,11 @@ app.post("/service-request", async (req, res) => {
       customer,
     } = req.body;
 
-    // ✅ Validation
     if (!customer?.name || !customer?.phone || !customer?.email) {
       return res.status(400).send("Customer info missing");
     }
+
+    console.log("📩 Incoming request for:", customer.email);
 
     const service = await ServiceModel.findOne({ slug: serviceSlug });
     if (!service) return res.status(400).send("Invalid service");
@@ -550,7 +551,11 @@ app.post("/service-request", async (req, res) => {
       email: customer.email,
       notificationStatus: "pending",
       notificationMeta: {
-        emailSent: false,
+        email: {
+          status: "pending",
+          error: null,
+          sentAt: null,
+        },
         providerNotifiedCount: 0,
       },
     });
@@ -560,7 +565,6 @@ app.post("/service-request", async (req, res) => {
     const requestId = serviceReq._id.toString();
     const cancelUrl = `${process.env.BASE_URL}/service-request/${requestId}/cancel`;
 
-    // ✅ Immediate response
     res.json({
       message: "Service request created",
       requestId,
@@ -569,129 +573,74 @@ app.post("/service-request", async (req, res) => {
     // ================= BACKGROUND =================
     setImmediate(async () => {
       let successCount = 0;
-      let emailSent = false;
+      let emailMeta = {
+        status: "pending",
+        error: null,
+        sentAt: null,
+      };
 
       try {
         // ================= EMAIL =================
         try {
-          await sendEmail(
+          console.log("📤 Sending email to:", customer.email);
+
+          const result = await sendEmail(
             customer.email,
             "Your Service Request is Received",
             `
             <h2>Hi ${customer.name},</h2>
             <p>Your request has been successfully received.</p>
-
             <p><b>Request ID:</b> ${requestId}</p>
             <p><b>Service:</b> ${service.title}</p>
             <p><b>Location:</b> ${locationText}</p>
-
             <p>We are assigning a provider shortly.</p>
             <p><b>Estimated response time:</b> 5–10 minutes</p>
-
             <br/>
-
-            <p>If you need to cancel your request, click below:</p>
-
-            <p>
-              <a href="${cancelUrl}"
-                style="background:#e74c3c;color:#fff;padding:10px 15px;text-decoration:none;border-radius:5px;">
-                Cancel Request
-              </a>
-            </p>
-
+            <a href="${cancelUrl}">Cancel Request</a>
             <br/>
             <p>Thank you,<br/>Harmain Team</p>
           `
           );
 
-          emailSent = true;
+          console.log("✅ Email API response:", result);
+
+          emailMeta = {
+            status: "sent",
+            error: null,
+            sentAt: new Date(),
+          };
+
         } catch (err) {
-          console.error("Email failed:", err.message);
+          console.error("❌ Email failed FULL:", err);
+
+          emailMeta = {
+            status: "failed",
+            error: err.message,
+            sentAt: null,
+          };
         }
 
         // ================= PROVIDERS =================
-
         const providers = await Provider.find({
           jobRole: serviceSlug.toLowerCase(),
           isActive: true,
           isAvailable: true,
         });
 
-        const cleanAddons = serviceReq.serviceAddons?.filter(
-          (a) => a && a.trim()
-        );
-
-        const addonsText =
-          cleanAddons?.length > 0 ? cleanAddons.join(", ") : "None";
-
-        const categoryText = serviceReq.selectedCategory || "N/A";
-
-        const amountText =
-          serviceReq.totalAmount !== undefined &&
-          serviceReq.totalAmount !== null
-            ? `₹${serviceReq.totalAmount}`
-            : "N/A";
-
-        const timeText =
-          serviceReq.preferredDate || new Date().toLocaleString("en-IN");
+        console.log("👨‍🔧 Providers found:", providers.length);
 
         for (const provider of providers) {
           try {
-            // 🔥 DUPLICATE CHECK (NEW)
-            const existing = await JobNotification.findOne({
-              serviceRequestId: serviceReq._id,
-              providerId: provider._id,
-            });
-
-            if (existing) {
-              continue; // skip duplicate
-            }
-
             const jobNotification = await JobNotification.create({
               serviceRequestId: serviceReq._id,
               providerId: provider._id,
               status: "created",
             });
 
-            const now = new Date();
-
-            const sessionActive =
-              provider.lastInteractionAt &&
-              now - provider.lastInteractionAt < 24 * 60 * 60 * 1000;
-
-            if (sessionActive) {
-              await sendWhatsAppText(
-                provider.phoneNumber,
-                `Hello ${provider.name},
-
-🔧 New ${serviceReq.serviceName} Job Request
-
-📍 Location: ${formatLocation(serviceReq.customerAddress)}
-📅 Time: ${timeText}
-
-🧾 Category: ${categoryText}
-➕ Add-ons: ${addonsText}
-💰 Estimated Amount: ${amountText}
-
-⚠️ Final price may vary depending on work done at site.
-
-Reply YES to accept or NO to decline.`
-              );
-            } else {
-              await sendWhatsAppTemplate(
-                provider.phoneNumber,
-                process.env.GUPSHUP_JOB_BROADCAST_TEMPLATE_ID,
-                [
-                  provider.name,
-                  formatLocation(serviceReq.customerAddress),
-                  timeText,
-                  serviceReq.serviceName,
-                  categoryText,
-                  addonsText,
-                  amountText,
-                ]
-              );
-            }
+            await sendWhatsAppText(
+              provider.phoneNumber,
+              `New Job: ${serviceReq.serviceName}`
+            );
 
             await JobNotification.updateOne(
               { _id: jobNotification._id },
@@ -700,31 +649,36 @@ Reply YES to accept or NO to decline.`
 
             successCount++;
           } catch (err) {
-            console.error("Provider failed:", provider.phoneNumber);
+            console.error("❌ Provider failed:", provider.phoneNumber, err);
           }
         }
 
-        // ✅ FINAL UPDATE
+        // ================= FINAL UPDATE =================
+        console.log("📊 Final Status:", {
+          successCount,
+          emailMeta,
+        });
+
         await ServiceRequest.updateOne(
           { _id: serviceReq._id },
           {
             notificationStatus: successCount > 0 ? "sent" : "failed",
             notificationMeta: {
-              emailSent,
+              email: emailMeta,
               providerNotifiedCount: successCount,
             },
           }
         );
 
       } catch (err) {
-        console.error("Background failed:", err);
+        console.error("🔥 Background failed FULL:", err);
 
         await ServiceRequest.updateOne(
           { _id: serviceReq._id },
           {
             notificationStatus: "failed",
             notificationMeta: {
-              emailSent,
+              email: emailMeta,
               providerNotifiedCount: successCount,
             },
           }
@@ -733,7 +687,7 @@ Reply YES to accept or NO to decline.`
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("🔥 API ERROR:", error);
     res.status(500).send("Failed to create request");
   }
 });
