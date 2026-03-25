@@ -37,10 +37,10 @@ const JobAssignmentHistorySchema = new mongoose.Schema(
     },
 
     actor: {
-      type: String,
-      enum: ["provider", "admin", "system"],
-      default: "system"
-    },
+  type: String,
+  enum: ["provider", "admin", "system", "customer"],
+  default: "system"
+},
 
     note: {
       type: String

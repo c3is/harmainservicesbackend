@@ -82,25 +82,22 @@ const ServiceRequestSchema = new mongoose.Schema(
 
     // ================= NOTIFICATION TRACKING =================
 
-    notificationStatus: {
+    notificationMeta: {
+  email: {
+    status: {
       type: String,
       enum: ["pending", "sent", "failed"],
       default: "pending",
-      index: true,
     },
+    error: String,
+    sentAt: Date,
+  },
 
-    // 🔥 NEW (VERY USEFUL)
-    notificationMeta: {
-      emailSent: {
-        type: Boolean,
-        default: false,
-      },
-
-      providerNotifiedCount: {
-        type: Number,
-        default: 0,
-      },
-    },
+  providerNotifiedCount: {
+    type: Number,
+    default: 0,
+  },
+},
   },
   { timestamps: true }
 );

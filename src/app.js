@@ -563,7 +563,7 @@ app.post("/service-request", async (req, res) => {
     await serviceReq.save();
 
     const requestId = serviceReq._id.toString();
-    const cancelUrl = `${process.env.BASE_URL}/service-request/${requestId}/cancel`;
+ const cancelUrl = `${process.env.FRONTEND_URL}/booking/${requestId}/cancel`;
 
     res.json({
       message: "Service request created",
@@ -958,67 +958,7 @@ app.get("/jobs/accepted/:id", async (req, res) => {
   }
 });
 
-// cancel job
-app.patch("/service-request/:requestId/cancel", async (req, res) => {
-  try {
-    const { requestId } = req.params;
 
-    const request = await ServiceRequest.findById(requestId);
-
-    if (!request) {
-      return res.status(404).json({ message: "Service request not found" });
-    }
-
-    if (request.status === "cancelled") {
-      return res.status(400).json({ message: "Job already cancelled" });
-    }
-
-    // 🔴 Update request status
-    request.status = "cancelled";
-    await request.save();
-
-    // 🔴 Cancel active jobs
-    await JobAcceptance.updateMany(
-      { requestId: request._id, status: "active" },
-      { $set: { status: "cancelled" } },
-    );
-
-    // 🔴 Expire notifications
-    await JobNotification.updateMany(
-      { serviceRequestId: request._id },
-      { status: "expired" },
-    );
-
-    // 🔴 Clean history (FIXED)
-    const historyData = {
-      requestId: request._id,
-      action: "cancelled_by_admin",
-      actor: "admin",
-    };
-
-    if (request.assignedProviderId) {
-      historyData.providerId = request.assignedProviderId;
-      historyData.providerName = request.assignedProviderName;
-    }
-
-    await JobAssignmentHistory.create(historyData);
-
-    // 🔴 Notify provider (if assigned)
-    if (request.assignedProviderPhone) {
-      await sendWhatsAppText(
-        request.assignedProviderPhone,
-        "⚠️ The assigned job has been cancelled by admin.",
-      );
-    }
-
-    res.json({
-      message: "Job cancelled successfully",
-    });
-  } catch (err) {
-    console.error("Cancel job error:", err);
-    res.status(500).json({ message: "Failed to cancel job" });
-  }
-});
 
 // Manually assign job by admin
 app.post("/service-request/:requestId/assign", async (req, res) => {
@@ -1310,7 +1250,12 @@ const allowedTransitions = {
 
 app.patch("/service-request/:id/status", async (req, res) => {
   try {
-    const { status: newStatus } = req.body;
+    const { status: newStatus, actor = "admin" } = req.body;
+
+    // 🔴 Basic validation
+    if (!newStatus) {
+      return res.status(400).json({ message: "Status is required" });
+    }
 
     const request = await ServiceRequest.findById(req.params.id);
 
@@ -1319,6 +1264,13 @@ app.patch("/service-request/:id/status", async (req, res) => {
     }
 
     const currentStatus = request.status;
+
+    // ✅ Handle already cancelled (UX friendly)
+    if (currentStatus === "cancelled" && newStatus === "cancelled") {
+      return res.status(200).json({
+        message: "Already cancelled",
+      });
+    }
 
     // ✅ Safe transition validation
     if (
@@ -1336,18 +1288,18 @@ app.patch("/service-request/:id/status", async (req, res) => {
     if (newStatus === "cancelled") {
       await JobAcceptance.updateMany(
         { requestId: request._id, status: "active" },
-        { $set: { status: "cancelled" } },
+        { $set: { status: "cancelled" } }
       );
 
       await JobNotification.updateMany(
         { serviceRequestId: request._id },
-        { status: "expired" },
+        { status: "expired" }
       );
 
       if (request.assignedProviderPhone) {
         await sendWhatsAppText(
           request.assignedProviderPhone,
-          "⚠️ The assigned job has been cancelled.",
+          "⚠️ The assigned job has been cancelled."
         );
       }
     }
@@ -1356,7 +1308,7 @@ app.patch("/service-request/:id/status", async (req, res) => {
     if (newStatus === "completed") {
       await JobAcceptance.updateMany(
         { requestId: request._id, status: "active" },
-        { $set: { status: "completed" } },
+        { $set: { status: "completed" } }
       );
     }
 
@@ -1376,11 +1328,13 @@ app.patch("/service-request/:id/status", async (req, res) => {
 
     const historyData = {
       requestId: request._id,
-      action: `status_changed_to_${newStatus}`,
-      actor: "admin", // or "system" if automated
+      actor,
+      action:
+        newStatus === "cancelled" && actor === "customer"
+          ? "cancelled_by_customer"
+          : `status_changed_to_${newStatus}`,
     };
 
-    // only include provider if exists
     if (request.assignedProviderId) {
       historyData.providerId = request.assignedProviderId;
       historyData.providerName = request.assignedProviderName;
@@ -1390,72 +1344,21 @@ app.patch("/service-request/:id/status", async (req, res) => {
 
     // ================= RESPONSE =================
 
-    res.json({
+    return res.json({
       message: "Status updated successfully",
       from: currentStatus,
       to: newStatus,
     });
+
   } catch (err) {
     console.error("Status update error:", err);
-    res.status(500).json({ message: "Failed to update status" });
-  }
-});
-
-// cancel req by customer
-app.get("/service-request/:requestId/cancel", async (req, res) => {
-  try {
-    const { requestId } = req.params;
-
-    const request = await ServiceRequest.findById(requestId);
-
-    if (!request) {
-      return res.send("Invalid request.");
-    }
-
-    if (request.status === "cancelled") {
-      return res.send("This request is already cancelled.");
-    }
-
-    // 🔴 Update request
-    request.status = "cancelled";
-    await request.save();
-
-    // 🔴 Cancel active jobs
-    await JobAcceptance.updateMany(
-      { requestId: request._id, status: "active" },
-      { $set: { status: "cancelled" } },
-    );
-
-    // 🔴 Expire notifications
-    await JobNotification.updateMany(
-      { serviceRequestId: request._id },
-      { status: "expired" },
-    );
-
-    // 🔴 History
-    await JobAssignmentHistory.create({
-      requestId: request._id,
-      action: "cancelled_by_customer",
-      actor: "customer",
+    return res.status(500).json({
+      message: "Failed to update status",
     });
-
-    // 🔴 Notify provider (if assigned)
-    if (request.assignedProviderPhone) {
-      await sendWhatsAppText(
-        request.assignedProviderPhone,
-        "⚠️ The job has been cancelled by the customer.",
-      );
-    }
-
-    return res.send(`
-      <h2>Request Cancelled</h2>
-      <p>Your service request has been cancelled successfully.</p>
-    `);
-  } catch (err) {
-    console.error("Cancel via link error:", err);
-    res.send("Something went wrong.");
   }
-});
+}); 
+// cancel req by customer
+
 // ================= SYSTEM =================
 
 // Health check
