@@ -11,12 +11,12 @@ const JobAssignmentHistorySchema = new mongoose.Schema(
     providerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Provider",
-      required: true
+      required: false
     },
 
     providerName: {
       type: String,
-      required: true
+      required: false
     },
 
     action: {
@@ -26,9 +26,20 @@ const JobAssignmentHistorySchema = new mongoose.Schema(
         "rejected",
         "cancelled_by_provider",
         "reassigned_by_admin",
-        "assigned_by_admin","cancelled_by_admin"
+        "assigned_by_admin",
+        "cancelled_by_admin",
+        "status_changed_to_completed",
+        "status_changed_to_cancelled",
+        "status_changed_to_assigned",
+        "cancelled_by_customer"
       ],
       required: true
+    },
+
+    actor: {
+      type: String,
+      enum: ["provider", "admin", "system"],
+      default: "system"
     },
 
     note: {
