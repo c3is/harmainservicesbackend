@@ -15,11 +15,11 @@ const sendEmail = async (to, subject, html) => {
     }
 
     const response = await resend.emails.send({
-      from: "Harmain <no-reply@harmain.in>",
+      from: "Harmain <no-reply@harmai.in>",
       to,
       subject,
       html,
-      reply_to: "support@harmain.in",
+      reply_to: "support@harmai.in",
     });
 
     if (!response || response.error) {

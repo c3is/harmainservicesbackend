@@ -59,7 +59,7 @@ runTest();
 
 //     // 🔴 Notify provider (if assigned)
 //     if (request.assignedProviderPhone) {
-//       await sendWhatsAppText(
+//       await sendWhatsAppTemplate(
 //         request.assignedProviderPhone,
 //         "⚠️ The assigned job has been cancelled by admin.",
 //       );

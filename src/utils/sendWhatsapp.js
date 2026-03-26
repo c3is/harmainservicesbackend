@@ -12,7 +12,7 @@ function formatDestination(phone) {
   return "91" + cleaned;
 }
 
-async function sendWhatsAppTemplate(destination, templateId, params) {
+async function sendWhatsAppTemplate(destination, templateId, params, retry = 1) {
   try {
     if (!templateId) {
       throw new Error("Template ID missing");
@@ -30,13 +30,10 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
 
     const formattedDestination = formatDestination(destination);
 
-    // 🔥 Avoid noisy logs in production
-    if (process.env.NODE_ENV !== "production") {
-      console.log("📤 WhatsApp Template Send");
-      console.log("➡️ To:", formattedDestination);
-      console.log("➡️ Template:", templateId);
-      console.log("➡️ Params:", safeParams);
-    }
+    console.log("📤 WhatsApp Template Send");
+    console.log("➡️ To:", formattedDestination);
+    console.log("➡️ Template:", templateId);
+    console.log("➡️ Params:", safeParams);
 
     const response = await axios.post(
       "https://api.gupshup.io/wa/api/v1/template/msg",
@@ -45,12 +42,9 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
         source: process.env.GUPSHUP_SOURCE_NUMBER,
         destination: formattedDestination,
         "src.name": process.env.GUPSHUP_APP_NAME,
-        message: JSON.stringify({
-          type: "template",
-          template: {
-            id: templateId,
-            params: safeParams,
-          },
+        template: JSON.stringify({
+          id: templateId,
+          params: safeParams,
         }),
       }),
       {
@@ -62,8 +56,17 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
       }
     );
 
+    console.log("📦 Gupshup Response:", response.data);
+
+    const isSuccess = response?.data?.status === "submitted";
+
+    if (!isSuccess && retry > 0) {
+      console.log("🔁 Retrying WhatsApp send...");
+      return await sendWhatsAppTemplate(destination, templateId, params, retry - 1);
+    }
+
     return {
-      success: true,
+      success: isSuccess,
       data: response.data,
     };
 
@@ -71,6 +74,11 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
     const errMsg = error?.response?.data || error.message;
 
     console.error("❌ WhatsApp Template Send Error:", errMsg);
+
+    if (retry > 0) {
+      console.log("🔁 Retrying due to error...");
+      return await sendWhatsAppTemplate(destination, templateId, params, retry - 1);
+    }
 
     return {
       success: false,
