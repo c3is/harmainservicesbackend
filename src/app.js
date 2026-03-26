@@ -866,28 +866,18 @@ app.post("/webhook/whatsapp", async (req, res) => {
   console.log("🔥 WEBHOOK HIT");
 
   try {
-    console.log("📦 FULL PAYLOAD:", JSON.stringify(req.body, null, 2));
-
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
-    if (!value?.messages?.length) {
-      console.log("⚠️ No messages in payload");
-      return res.sendStatus(200);
-    }
+    if (!value?.messages?.length) return res.sendStatus(200);
 
     const message = value.messages[0];
-    console.log("📩 MESSAGE:", JSON.stringify(message, null, 2));
 
     const incomingPhone =
       message?.from || value.contacts?.[0]?.wa_id;
 
-    if (!incomingPhone) {
-      console.log("❌ No incoming phone");
-      return res.sendStatus(200);
-    }
+    if (!incomingPhone) return res.sendStatus(200);
 
     const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
-    console.log("📞 PHONE:", normalizedPhone);
 
     // ================= TEXT PARSING =================
     let text = "";
@@ -906,10 +896,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     text = String(text).trim().toUpperCase();
 
-    console.log("🧠 FINAL TEXT:", text);
-
     if (!["YES", "NO"].includes(text)) {
-      console.log("⚠️ Not YES/NO → ignoring");
       return res.sendStatus(200);
     }
 
@@ -919,12 +906,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
       isActive: true,
     });
 
-    console.log("👨‍🔧 PROVIDER:", provider);
-
-    if (!provider) {
-      console.log("❌ Provider not found");
-      return res.sendStatus(200);
-    }
+    if (!provider) return res.sendStatus(200);
 
     provider.lastInteractionAt = new Date();
     await provider.save();
@@ -935,16 +917,11 @@ app.post("/webhook/whatsapp", async (req, res) => {
       status: "sent",
     }).sort({ createdAt: -1 });
 
-    console.log("📦 JOB NOTIFICATION:", jobNotification);
-
     if (!jobNotification) {
-      console.log("❌ No job found");
-
       await sendWhatsAppText(
         normalizedPhone,
         "⚠️ This job is no longer available."
       );
-
       return res.sendStatus(200);
     }
 
@@ -952,10 +929,15 @@ app.post("/webhook/whatsapp", async (req, res) => {
       jobNotification.serviceRequestId
     );
 
-    console.log("📋 SERVICE REQUEST:", serviceReq);
+    if (!serviceReq) return res.sendStatus(200);
 
-    if (!serviceReq) {
-      console.log("❌ Service request not found");
+    // ================= 🔥 CRITICAL FIX =================
+    // Prevent second provider from getting job
+    if (serviceReq.status !== "pending") {
+      await sendWhatsAppText(
+        normalizedPhone,
+        "⚠️ This job is no longer available."
+      );
       return res.sendStatus(200);
     }
 
@@ -965,15 +947,10 @@ app.post("/webhook/whatsapp", async (req, res) => {
       providerId: provider._id,
     });
 
-    if (alreadyAccepted) {
-      console.log("⚠️ Already accepted");
-      return res.sendStatus(200);
-    }
+    if (alreadyAccepted) return res.sendStatus(200);
 
     // ================= YES FLOW =================
     if (text === "YES") {
-      console.log("✅ YES FLOW TRIGGERED");
-
       const updated = await ServiceRequest.findOneAndUpdate(
         {
           _id: serviceReq._id,
@@ -990,19 +967,15 @@ app.post("/webhook/whatsapp", async (req, res) => {
         { new: true }
       );
 
-      console.log("🔄 UPDATE RESULT:", updated);
-
       if (!updated) {
-        console.log("❌ Job already taken");
-
         await sendWhatsAppText(
           normalizedPhone,
           "⚠️ This job has already been taken."
         );
-
         return res.sendStatus(200);
       }
 
+      // ================= FORMAT =================
       const cleanAddons = serviceReq.serviceAddons?.filter(
         (a) => a && a.trim()
       );
@@ -1025,6 +998,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
           ? `₹${serviceReq.totalAmount}`
           : "N/A";
 
+      // ================= SAVE =================
       await JobAcceptance.create({
         requestId: serviceReq._id,
         providerId: provider._id,
@@ -1040,6 +1014,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         action: "accepted",
       });
 
+      // ================= UPDATE NOTIFICATIONS =================
       await JobNotification.updateOne(
         { _id: jobNotification._id },
         { status: "accepted" }
@@ -1053,8 +1028,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         { status: "expired" }
       );
 
-      console.log("📤 Sending confirmation template");
-
+      // ================= CONFIRMATION =================
       await sendWhatsAppTemplate(
         normalizedPhone,
         process.env.GUPSHUP_CONFIRMED_TEMPLATE_ID,
@@ -1071,8 +1045,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     // ================= NO FLOW =================
     if (text === "NO") {
-      console.log("❌ NO FLOW TRIGGERED");
-
       await JobNotification.updateOne(
         { _id: jobNotification._id },
         { status: "rejected" }
