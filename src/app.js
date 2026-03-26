@@ -21,6 +21,87 @@ app.use(express.json());
 
 // ================= HELPERS =================
 
+setInterval(async () => {
+  try {
+    const jobs = await ServiceRequest.find({
+      status: "pending",
+      retryCount: 0,
+      createdAt: {
+        $lt: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours
+      }
+    });
+
+    for (const job of jobs) {
+      console.log("🔄 Re-sending job:", job._id);
+
+      const providers = await Provider.find({
+        jobRole: job.serviceName.toLowerCase(),
+        isActive: true,
+        isAvailable: true,
+      });
+
+      for (const provider of providers) {
+        try {
+          // 🔥 CREATE TRACKING
+          const jobNotification = await JobNotification.create({
+            serviceRequestId: job._id,
+            providerId: provider._id,
+            status: "retry",
+          });
+
+          // 🔥 FORMAT DATA
+          const cleanAddons = job.serviceAddons?.filter(a => a && a.trim());
+          const addonsText =
+            cleanAddons?.length > 0 ? cleanAddons.join(", ") : "None";
+
+          const fullAddress = [
+            job.customerAddress?.house,
+            job.customerAddress?.area,
+            job.customerAddress?.district,
+            job.customerAddress?.pincode,
+          ].filter(Boolean).join(", ");
+
+          const amountText =
+            job.totalAmount !== undefined && job.totalAmount !== null
+              ? `₹${job.totalAmount}`
+              : "N/A";
+
+          // 🔥 SEND TEMPLATE
+          await sendWhatsAppTemplate(
+            provider.phoneNumber,
+            process.env.GUPSHUP_JOB_BROADCAST_TEMPLATE_ID,
+            [
+              provider.name,
+              fullAddress || formatLocation(job.customerAddress),
+              job.preferredDate || "Not specified",
+              job.serviceName,
+              job.selectedCategory,
+              addonsText,
+              amountText
+            ]
+          );
+
+          // 🔥 UPDATE STATUS
+          await JobNotification.updateOne(
+            { _id: jobNotification._id },
+            { status: "sent" }
+          );
+
+        } catch (err) {
+          console.error("❌ Retry failed:", provider.phoneNumber, err);
+        }
+      }
+
+      // 🔥 MARK JOB AS RETRIED (IMPORTANT)
+      job.retryCount = 1;
+      await job.save();
+    }
+
+  } catch (err) {
+    console.error("🔥 Retry system error:", err);
+  }
+}, 5 * 60 * 1000);
+
 function formatDestination(phone) {
   phone = phone.replace(/\D/g, "").slice(-10);
   return "91" + phone;
@@ -527,6 +608,7 @@ app.post("/service-request", async (req, res) => {
       customer,
     } = req.body;
 
+    // ================= VALIDATION =================
     if (!customer?.name || !customer?.phone || !customer?.email) {
       return res.status(400).send("Customer info missing");
     }
@@ -538,6 +620,7 @@ app.post("/service-request", async (req, res) => {
 
     const locationText = formatLocation(customer.addresses);
 
+    // ================= CREATE REQUEST =================
     const serviceReq = new ServiceRequest({
       serviceId: service._id,
       serviceName: service.title,
@@ -630,9 +713,8 @@ app.post("/service-request", async (req, res) => {
             error: null,
             sentAt: new Date(),
           };
-
         } catch (err) {
-          console.error("❌ Email failed FULL:", err);
+          console.error("❌ Email failed:", err);
 
           emailMeta = {
             status: "failed",
@@ -658,9 +740,36 @@ app.post("/service-request", async (req, res) => {
               status: "created",
             });
 
-            await sendWhatsAppText(
+            // ================= FORMAT =================
+            const cleanAddons = serviceAddons?.filter(a => a && a.trim());
+            const addonsText =
+              cleanAddons?.length > 0 ? cleanAddons.join(", ") : "None";
+
+            const fullAddress = [
+              customer.addresses?.house,
+              customer.addresses?.area,
+              customer.addresses?.district,
+              customer.addresses?.pincode,
+            ].filter(Boolean).join(", ");
+
+            const amountText =
+              totalAmount !== undefined && totalAmount !== null
+                ? `₹${totalAmount}`
+                : "N/A";
+
+            // ================= TEMPLATE SEND =================
+            await sendWhatsAppTemplate(
               provider.phoneNumber,
-              `New Job: ${serviceReq.serviceName}`
+              process.env.GUPSHUP_JOB_BROADCAST_TEMPLATE_ID,
+              [
+                provider.name,
+                fullAddress,
+                customer.preferredDate || "Not specified",
+                service.title,
+                selectedCategory,
+                addonsText,
+                amountText,
+              ]
             );
 
             await JobNotification.updateOne(
@@ -675,11 +784,6 @@ app.post("/service-request", async (req, res) => {
         }
 
         // ================= FINAL UPDATE =================
-        console.log("📊 Final Status:", {
-          successCount,
-          emailMeta,
-        });
-
         await ServiceRequest.updateOne(
           { _id: serviceReq._id },
           {
@@ -691,8 +795,13 @@ app.post("/service-request", async (req, res) => {
           }
         );
 
+        console.log("📊 Final Status:", {
+          successCount,
+          emailMeta,
+        });
+
       } catch (err) {
-        console.error("🔥 Background failed FULL:", err);
+        console.error("🔥 Background failed:", err);
 
         await ServiceRequest.updateOne(
           { _id: serviceReq._id },
@@ -743,21 +852,21 @@ app.get("/service-requests", async (req, res) => {
 
 app.post("/webhook/whatsapp", async (req, res) => {
   try {
-    const payload = req.body;
-    const entry = payload?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
+    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
     if (!value?.messages?.length) return res.sendStatus(200);
 
-    const incomingPhone = value.messages[0]?.from || value.contacts?.[0]?.wa_id;
+    const message = value.messages[0];
+
+    const incomingPhone =
+      message?.from || value.contacts?.[0]?.wa_id;
 
     if (!incomingPhone) return res.sendStatus(200);
 
     const normalizedPhone = incomingPhone.replace(/\D/g, "").slice(-10);
 
     let text =
-      value.messages[0]?.text?.body || value.messages[0]?.button?.text || "";
+      message?.text?.body || message?.button?.text || "";
 
     text = text.trim().toUpperCase();
 
@@ -766,7 +875,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
     }
 
     // ================= FIND PROVIDER =================
-
     const provider = await Provider.findOne({
       phoneNumber: normalizedPhone,
       isActive: true,
@@ -778,7 +886,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
     await provider.save();
 
     // ================= FIND JOB =================
-
     const jobNotification = await JobNotification.findOne({
       providerId: provider._id,
       status: "sent",
@@ -787,33 +894,34 @@ app.post("/webhook/whatsapp", async (req, res) => {
     if (!jobNotification) {
       await sendWhatsAppText(
         normalizedPhone,
-        "⚠️ This job is no longer available.",
+        "⚠️ This job is no longer available."
       );
       return res.sendStatus(200);
     }
 
     const serviceReq = await ServiceRequest.findById(
-      jobNotification.serviceRequestId,
+      jobNotification.serviceRequestId
     );
 
     if (!serviceReq) return res.sendStatus(200);
 
-    // ================= ✅ DUPLICATE WEBHOOK FIX =================
-
+    // ================= DUPLICATE CHECK =================
     const alreadyAccepted = await JobAcceptance.findOne({
       requestId: serviceReq._id,
       providerId: provider._id,
     });
 
-    if (alreadyAccepted) {
-      return res.sendStatus(200);
-    }
+    if (alreadyAccepted) return res.sendStatus(200);
 
     // ================= YES FLOW =================
-
     if (text === "YES") {
-      const update = await ServiceRequest.updateOne(
-        { _id: serviceReq._id, status: "pending" },
+
+      // 🔥 FIXED: ATOMIC ASSIGNMENT
+      const updated = await ServiceRequest.findOneAndUpdate(
+        {
+          _id: serviceReq._id,
+          status: "pending",
+        },
         {
           $set: {
             status: "assigned",
@@ -822,18 +930,20 @@ app.post("/webhook/whatsapp", async (req, res) => {
             assignedProviderPhone: provider.phoneNumber,
           },
         },
+        { new: true }
       );
 
-      if (update.modifiedCount === 0) {
+      if (!updated) {
         await sendWhatsAppText(
           normalizedPhone,
-          "⚠️ This job has already been taken.",
+          "⚠️ This job has already been taken."
         );
         return res.sendStatus(200);
       }
 
+      // ================= FORMAT =================
       const cleanAddons = serviceReq.serviceAddons?.filter(
-        (a) => a && a.trim(),
+        (a) => a && a.trim()
       );
 
       const addonsText =
@@ -849,10 +959,12 @@ app.post("/webhook/whatsapp", async (req, res) => {
         .join(", ");
 
       const amountText =
-        serviceReq.totalAmount !== undefined && serviceReq.totalAmount !== null
+        serviceReq.totalAmount !== undefined &&
+        serviceReq.totalAmount !== null
           ? `₹${serviceReq.totalAmount}`
           : "N/A";
 
+      // ================= SAVE =================
       await JobAcceptance.create({
         requestId: serviceReq._id,
         providerId: provider._id,
@@ -868,9 +980,10 @@ app.post("/webhook/whatsapp", async (req, res) => {
         action: "accepted",
       });
 
+      // ================= UPDATE NOTIFICATIONS =================
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "accepted" },
+        { status: "accepted" }
       );
 
       await JobNotification.updateMany(
@@ -878,9 +991,10 @@ app.post("/webhook/whatsapp", async (req, res) => {
           serviceRequestId: serviceReq._id,
           _id: { $ne: jobNotification._id },
         },
-        { status: "expired" },
+        { status: "expired" }
       );
 
+      // ================= CONFIRMATION TEMPLATE =================
       await sendWhatsAppTemplate(
         normalizedPhone,
         process.env.GUPSHUP_CONFIRMED_TEMPLATE_ID,
@@ -891,16 +1005,15 @@ app.post("/webhook/whatsapp", async (req, res) => {
           serviceReq.serviceName,
           addonsText,
           amountText,
-        ],
+        ]
       );
     }
 
     // ================= NO FLOW =================
-
     if (text === "NO") {
       await JobNotification.updateOne(
         { _id: jobNotification._id },
-        { status: "rejected" },
+        { status: "rejected" }
       );
 
       await JobAssignmentHistory.create({
@@ -910,6 +1023,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         action: "rejected",
       });
     }
+
   } catch (err) {
     console.error("Webhook error:", err);
   }

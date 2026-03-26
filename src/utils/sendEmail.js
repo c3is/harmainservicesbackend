@@ -4,26 +4,36 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async (to, subject, html) => {
   try {
-    console.log("📨 sendEmail called");
-    console.log("➡️ To:", to);
-    console.log("➡️ Subject:", subject);
+    if (!to) throw new Error("Recipient email missing");
+    if (!subject) throw new Error("Email subject missing");
+    if (!html) throw new Error("Email body missing");
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("📨 sendEmail called");
+      console.log("➡️ To:", to);
+      console.log("➡️ Subject:", subject);
+    }
 
     const response = await resend.emails.send({
-      from: "Harmain <no-reply@harmain.in>", // ✅ production sender
+      from: "Harmain <no-reply@harmain.in>",
       to,
       subject,
       html,
-      reply_to: "support@harmain.in", // ✅ handle replies properly
+      reply_to: "support@harmain.in",
     });
 
-    console.log("✅ Email sent successfully");
-    console.log("📩 Email ID:", response?.id);
+    if (!response || response.error) {
+      throw new Error(response?.error?.message || "Unknown email error");
+    }
 
     return response;
 
   } catch (error) {
-    console.error("❌ Email error FULL:", error);
-    throw error;
+    const errMsg = error?.message || error;
+
+    console.error("❌ Email send failed:", errMsg);
+
+    throw error; // keep throwing (your flow depends on this)
   }
 };
 

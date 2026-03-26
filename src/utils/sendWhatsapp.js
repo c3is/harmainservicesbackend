@@ -30,6 +30,7 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
 
     const formattedDestination = formatDestination(destination);
 
+    // 🔥 Avoid noisy logs in production
     if (process.env.NODE_ENV !== "production") {
       console.log("📤 WhatsApp Template Send");
       console.log("➡️ To:", formattedDestination);
@@ -44,9 +45,12 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
         source: process.env.GUPSHUP_SOURCE_NUMBER,
         destination: formattedDestination,
         "src.name": process.env.GUPSHUP_APP_NAME,
-        template: JSON.stringify({
-          id: templateId,
-          params: safeParams,
+        message: JSON.stringify({
+          type: "template",
+          template: {
+            id: templateId,
+            params: safeParams,
+          },
         }),
       }),
       {
@@ -54,7 +58,7 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
           "Content-Type": "application/x-www-form-urlencoded",
           apikey: process.env.GUPSHUP_API_KEY,
         },
-        timeout: 10000, // ⏱ prevents hanging
+        timeout: 10000,
       }
     );
 
@@ -62,11 +66,11 @@ async function sendWhatsAppTemplate(destination, templateId, params) {
       success: true,
       data: response.data,
     };
-  } catch (error) {
-    console.error("❌ WhatsApp Template Send Error");
 
+  } catch (error) {
     const errMsg = error?.response?.data || error.message;
-    console.error("📌 Error:", errMsg);
+
+    console.error("❌ WhatsApp Template Send Error:", errMsg);
 
     return {
       success: false,
