@@ -1,4 +1,6 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async (to, subject, html) => {
   try {
@@ -6,48 +8,22 @@ const sendEmail = async (to, subject, html) => {
     console.log("➡️ To:", to);
     console.log("➡️ Subject:", subject);
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.harmain.in",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    // 🔥 Verify connection (VERY IMPORTANT)
-    await transporter.verify();
-    console.log("✅ SMTP connection verified");
-
-    const mailOptions = {
-      from: `"Harmain Services" <${process.env.EMAIL_USER}>`,
+    const response = await resend.emails.send({
+      from: "Harmain <no-reply@harmain.in>", // ✅ production sender
       to,
       subject,
       html,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+      reply_to: "support@harmain.in", // ✅ handle replies properly
+    });
 
     console.log("✅ Email sent successfully");
-    console.log("📩 Message ID:", info.messageId);
-    console.log("📬 Response:", info.response);
+    console.log("📩 Email ID:", response?.id);
 
-    return info; // 🔥 IMPORTANT (so API can log it)
+    return response;
 
   } catch (error) {
     console.error("❌ Email error FULL:", error);
-
-    // Show deeper info if available
-    if (error.response) {
-      console.error("📨 SMTP response:", error.response);
-    }
-
-    if (error.code) {
-      console.error("⚠️ Error code:", error.code);
-    }
-
-    throw error; // 🔥 IMPORTANT (so API catches it)
+    throw error;
   }
 };
 

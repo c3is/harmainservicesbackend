@@ -563,7 +563,7 @@ app.post("/service-request", async (req, res) => {
     await serviceReq.save();
 
     const requestId = serviceReq._id.toString();
- const cancelUrl = `${process.env.FRONTEND_URL}/booking/${requestId}/cancel`;
+    const cancelUrl = `${process.env.FRONTEND_URL}/booking/${requestId}/cancel`;
 
     res.json({
       message: "Service request created",
@@ -584,23 +584,44 @@ app.post("/service-request", async (req, res) => {
         try {
           console.log("📤 Sending email to:", customer.email);
 
-          const result = await sendEmail(
-            customer.email,
-            "Your Service Request is Received",
+          const result = await Promise.race([
+            sendEmail(
+              customer.email,
+              "Your Service Request is Received",
+              `
+              <h2>Hi ${customer.name},</h2>
+              <p>Your request has been successfully received.</p>
+
+              <p><b>Request ID:</b> ${requestId}</p>
+              <p><b>Service:</b> ${service.title}</p>
+              <p><b>Location:</b> ${locationText}</p>
+
+              <p>We are assigning a provider shortly.</p>
+              <p><b>Estimated response time:</b> 5–10 minutes</p>
+
+              <br/>
+
+              <a href="${cancelUrl}" style="
+                display:inline-block;
+                padding:10px 16px;
+                background:#dc2626;
+                color:#ffffff;
+                text-decoration:none;
+                border-radius:6px;
+                font-weight:600;
+              ">
+                Cancel Request
+              </a>
+
+              <br/><br/>
+
+              <p>Thank you,<br/>Harmain Team</p>
             `
-            <h2>Hi ${customer.name},</h2>
-            <p>Your request has been successfully received.</p>
-            <p><b>Request ID:</b> ${requestId}</p>
-            <p><b>Service:</b> ${service.title}</p>
-            <p><b>Location:</b> ${locationText}</p>
-            <p>We are assigning a provider shortly.</p>
-            <p><b>Estimated response time:</b> 5–10 minutes</p>
-            <br/>
-            <a href="${cancelUrl}">Cancel Request</a>
-            <br/>
-            <p>Thank you,<br/>Harmain Team</p>
-          `
-          );
+            ),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Email timeout")), 10000)
+            ),
+          ]);
 
           console.log("✅ Email API response:", result);
 
