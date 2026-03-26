@@ -882,17 +882,13 @@ app.post("/webhook/whatsapp", async (req, res) => {
     // ================= TEXT PARSING =================
     let text = "";
 
-    if (message?.text?.body) {
-      text = message.text.body;
-    } else if (message?.button?.payload) {
-      text = message.button.payload;
-    } else if (message?.button?.text) {
-      text = message.button.text;
-    } else if (message?.interactive?.button_reply?.id) {
+    if (message?.text?.body) text = message.text.body;
+    else if (message?.button?.payload) text = message.button.payload;
+    else if (message?.button?.text) text = message.button.text;
+    else if (message?.interactive?.button_reply?.id)
       text = message.interactive.button_reply.id;
-    } else if (message?.interactive?.button_reply?.title) {
+    else if (message?.interactive?.button_reply?.title)
       text = message.interactive.button_reply.title;
-    }
 
     text = String(text).trim().toUpperCase();
 
@@ -931,16 +927,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     if (!serviceReq) return res.sendStatus(200);
 
-    // ================= 🔥 CRITICAL FIX =================
-    // Prevent second provider from getting job
-    if (serviceReq.status !== "pending") {
-      await sendWhatsAppText(
-        normalizedPhone,
-        "⚠️ This job is no longer available."
-      );
-      return res.sendStatus(200);
-    }
-
     // ================= DUPLICATE CHECK =================
     const alreadyAccepted = await JobAcceptance.findOne({
       requestId: serviceReq._id,
@@ -951,6 +937,8 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
     // ================= YES FLOW =================
     if (text === "YES") {
+
+      // 🔥 ONLY THIS CONTROLS EVERYTHING (ATOMIC)
       const updated = await ServiceRequest.findOneAndUpdate(
         {
           _id: serviceReq._id,
@@ -967,15 +955,17 @@ app.post("/webhook/whatsapp", async (req, res) => {
         { new: true }
       );
 
+      // ❌ IF FAILED → JOB ALREADY TAKEN
       if (!updated) {
         await sendWhatsAppText(
           normalizedPhone,
-          "⚠️ This job has already been taken."
+          "⚠️ This job is no longer available."
         );
         return res.sendStatus(200);
       }
 
-      // ================= FORMAT =================
+      // ✅ ONLY FIRST PROVIDER REACHES HERE
+
       const cleanAddons = serviceReq.serviceAddons?.filter(
         (a) => a && a.trim()
       );
@@ -998,7 +988,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
           ? `₹${serviceReq.totalAmount}`
           : "N/A";
 
-      // ================= SAVE =================
       await JobAcceptance.create({
         requestId: serviceReq._id,
         providerId: provider._id,
@@ -1014,7 +1003,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
         action: "accepted",
       });
 
-      // ================= UPDATE NOTIFICATIONS =================
       await JobNotification.updateOne(
         { _id: jobNotification._id },
         { status: "accepted" }
@@ -1028,7 +1016,6 @@ app.post("/webhook/whatsapp", async (req, res) => {
         { status: "expired" }
       );
 
-      // ================= CONFIRMATION =================
       await sendWhatsAppTemplate(
         normalizedPhone,
         process.env.GUPSHUP_CONFIRMED_TEMPLATE_ID,
@@ -1057,6 +1044,7 @@ app.post("/webhook/whatsapp", async (req, res) => {
         action: "rejected",
       });
     }
+
   } catch (err) {
     console.error("💥 Webhook error:", err);
   }
